@@ -1,6 +1,6 @@
 import { config, isAdmin } from "./config.js";
 import { buildCat1Window, formatCat1Window } from "./cat1-window.js";
-import { checkForecastContext, checkLightningRisk } from "./weather.js";
+import { checkForecastContext, checkLightningRisk, getHourlyWeatherSummary } from "./weather.js";
 import {
   adminKeyboard,
   answerCallback,
@@ -77,6 +77,16 @@ export async function runCronWeatherCheck() {
   };
 }
 
+export async function runHourlyWeatherBroadcast() {
+  const weather = await getHourlyWeatherSummary();
+  await sendMessage(config.channelId, weather.summary);
+  return {
+    ok: true,
+    broadcasted: true,
+    summary: weather.summary
+  };
+}
+
 async function handleAdminCommand(text, chatId) {
   const [command, ...parts] = text.split(/\s+/);
   const rest = parts.join(" ");
@@ -143,6 +153,18 @@ async function handleAdminCommand(text, chatId) {
       ].join("\n")
     );
     return;
+  }
+
+  if (command === "/weather_now") {
+    const weather = await getHourlyWeatherSummary();
+    await sendMessage(chatId, weather.summary, { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (command === "/broadcast_weather") {
+    const result = await runHourlyWeatherBroadcast();
+    await sendMessage(chatId, "Weather update broadcasted.", { reply_markup: adminKeyboard() });
+    return result;
   }
 
   if (command === "/export_log") {
@@ -265,6 +287,12 @@ async function handleAdminCallback(callbackQuery) {
       ].join("\n"),
       { reply_markup: adminKeyboard() }
     );
+    return;
+  }
+
+  if (action === "broadcast_weather") {
+    await runHourlyWeatherBroadcast();
+    await sendMessage(chatId, "Weather update broadcasted.", { reply_markup: adminKeyboard() });
     return;
   }
 

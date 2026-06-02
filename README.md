@@ -38,6 +38,7 @@ Vercel cannot keep `npm start` running 24/7 as a long-polling process. This repo
 
 - `/api/telegram` receives Telegram webhook updates
 - `/api/cron` performs the weather check when called by Vercel Cron, cron-job.org, UptimeRobot, or another scheduler
+- `/api/hourly-weather` broadcasts an hourly weather check when called by a scheduler
 - `/api/health` confirms the deployment is alive
 
 Set these Vercel environment variables:
@@ -106,6 +107,14 @@ https://YOUR-VERCEL-DOMAIN.vercel.app/api/cron?secret=YOUR_CRON_SECRET
 
 Every 5 minutes is a reasonable starting point.
 
+For hourly weather updates, call:
+
+```text
+https://YOUR-VERCEL-DOMAIN.vercel.app/api/hourly-weather?secret=YOUR_CRON_SECRET
+```
+
+Set the external scheduler to once every 60 minutes.
+
 ## Useful Commands
 
 Admin-only:
@@ -117,11 +126,13 @@ Admin-only:
 /resume_event
 /status
 /check_weather
+/weather_now
+/broadcast_weather
 /broadcast Your message here
 /export_log
 ```
 
-Admins also get an inline control panel after `/start` or `/help`, with buttons for activating CAT1, all-clear, pause/resume, weather check, and status.
+Admins also get an inline control panel after `/start` or `/help`, with buttons for activating CAT1, all-clear, pause/resume, weather check, status, and broadcasting the latest weather.
 
 `/cat1_on` supports a CAT1 timing window:
 

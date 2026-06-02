@@ -11,7 +11,7 @@ import {
   sendDocument,
   sendMessage
 } from "./telegram.js";
-import { checkForecastContext, checkLightningRisk } from "./weather.js";
+import { checkForecastContext, checkLightningRisk, getHourlyWeatherSummary } from "./weather.js";
 
 let state = loadState();
 ensureLogFile();
@@ -190,6 +190,18 @@ async function handleAdminCommand(text, chatId, user) {
     return;
   }
 
+  if (command === "/weather_now") {
+    const weather = await getHourlyWeatherSummary();
+    await sendMessage(chatId, weather.summary, { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (command === "/broadcast_weather") {
+    await broadcastHourlyWeather();
+    await sendMessage(chatId, "Weather update broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
   if (command === "/export_log") {
     await sendDocument(chatId, config.logPath, "Tidehold CAT1 event log");
     return;
@@ -326,6 +338,12 @@ async function handleAdminCallback(callbackQuery) {
     return;
   }
 
+  if (action === "broadcast_weather") {
+    await broadcastHourlyWeather();
+    await sendMessage(chatId, "Weather update broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
   await sendMessage(chatId, "Unknown admin action.", { reply_markup: adminKeyboard() });
 }
 
@@ -354,6 +372,11 @@ async function runWeatherCheck(reason) {
   state.lastAlertAt = new Date().toISOString();
   saveState(state);
   await broadcastCat1(result.summary, false);
+}
+
+async function broadcastHourlyWeather() {
+  const weather = await getHourlyWeatherSummary();
+  await sendMessage(config.channelId, weather.summary);
 }
 
 async function broadcastCat1(reason, manual, window = buildCat1Window()) {

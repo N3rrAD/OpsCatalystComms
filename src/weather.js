@@ -119,6 +119,47 @@ export async function checkForecastContext() {
   };
 }
 
+export async function getHourlyWeatherSummary() {
+  const [twoHourResult, twentyFourHourResult] = await Promise.allSettled([
+    fetchJson(config.twoHourForecastApiUrl),
+    fetchJson(config.forecastApiUrl)
+  ]);
+
+  const twoHour = twoHourResult.status === "fulfilled"
+    ? summarizeTwoHourForecast(twoHourResult.value)
+    : { summary: `2-hour forecast unavailable: ${twoHourResult.reason.message}` };
+  const twentyFourHour = twentyFourHourResult.status === "fulfilled"
+    ? summarizeTwentyFourHourForecast(twentyFourHourResult.value)
+    : { summary: `24-hour forecast unavailable: ${twentyFourHourResult.reason.message}` };
+
+  return {
+    updated: twoHour.updated || twentyFourHour.updated || "unknown",
+    nearestArea: twoHour.nearestArea || "unknown",
+    condition: twoHour.condition || "unknown",
+    validPeriod: twoHour.validPeriod || "",
+    temperature: twentyFourHour.temperature || "unknown",
+    humidity: twentyFourHour.humidity || "unknown",
+    wind: twentyFourHour.wind || "unknown",
+    regionalForecast: twentyFourHour.regionalForecast || "",
+    summary: [
+      `<b>Hourly Weather Check</b>`,
+      "",
+      `Nearest area: ${escapeHtml(twoHour.nearestArea || "unknown")}`,
+      `Condition: ${escapeHtml(twoHour.condition || "unknown")}`,
+      twoHour.validPeriod ? `Valid: ${escapeHtml(twoHour.validPeriod)}` : "",
+      "",
+      `Temperature: ${escapeHtml(twentyFourHour.temperature || "unknown")}`,
+      `Humidity: ${escapeHtml(twentyFourHour.humidity || "unknown")}`,
+      `Wind: ${escapeHtml(twentyFourHour.wind || "unknown")}`,
+      twentyFourHour.regionalForecast ? `Region outlook: ${escapeHtml(twentyFourHour.regionalForecast)}` : "",
+      "",
+      "Note: forecast checks are situational awareness only, not confirmed CAT1."
+    ]
+      .filter(Boolean)
+      .join("\n")
+  };
+}
+
 async function fetchJson(url) {
   const headers = {
     Accept: "application/json",
@@ -188,6 +229,71 @@ function isThunderRiskForecast(value) {
     text.includes("thunder") ||
     text.includes("heavy showers with gusty winds")
   );
+}
+
+function summarizeTwoHourForecast(payload) {
+  const data = payload?.data || payload;
+  const metadata = Array.isArray(data?.area_metadata) ? data.area_metadata : [];
+  const item = Array.isArray(data?.items) ? data.items[0] : null;
+  const forecasts = Array.isArray(item?.forecasts) ? item.forecasts : [];
+  const nearest = forecasts
+    .map((forecast) => {
+      const areaMeta = metadata.find((area) => area.name === forecast.area);
+      const lat = Number(areaMeta?.label_location?.latitude);
+      const lon = Number(areaMeta?.label_location?.longitude);
+      return {
+        area: forecast.area,
+        forecast: forecast.forecast || "",
+        distanceKm: Number.isFinite(lat) && Number.isFinite(lon)
+          ? haversineKm(config.eventLat, config.eventLon, lat, lon)
+          : Number.POSITIVE_INFINITY
+      };
+    })
+    .filter((area) => Number.isFinite(area.distanceKm))
+    .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+
+  return {
+    updated: item?.update_timestamp || item?.timestamp || "",
+    nearestArea: nearest ? `${nearest.area} (${nearest.distanceKm.toFixed(1)} km)` : "",
+    condition: nearest?.forecast || "",
+    validPeriod: item?.valid_period?.text || ""
+  };
+}
+
+function summarizeTwentyFourHourForecast(payload) {
+  const data = payload?.data || payload;
+  const record = Array.isArray(data?.records) ? data.records[0] : null;
+  const general = record?.general || {};
+  const temperature = general.temperature
+    ? `${general.temperature.low}-${general.temperature.high} C`
+    : "";
+  const humidity = general.relativeHumidity
+    ? `${general.relativeHumidity.low}-${general.relativeHumidity.high}%`
+    : "";
+  const wind = general.wind
+    ? `${general.wind.direction || ""} ${general.wind.speed?.low || "?"}-${general.wind.speed?.high || "?"} km/h`.trim()
+    : "";
+  const currentPeriod = Array.isArray(record?.periods) ? record.periods[0] : null;
+  const regionalForecast = currentPeriod?.regions
+    ? Object.entries(currentPeriod.regions)
+        .map(([region, value]) => `${region}: ${value?.text || value?.code || JSON.stringify(value)}`)
+        .join("; ")
+    : general.forecast?.text || "";
+
+  return {
+    updated: record?.updatedTimestamp || record?.timestamp || "",
+    temperature,
+    humidity,
+    wind,
+    regionalForecast
+  };
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 function haversineKm(lat1, lon1, lat2, lon2) {

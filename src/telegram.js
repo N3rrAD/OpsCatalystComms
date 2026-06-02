@@ -120,6 +120,9 @@ export function adminKeyboard() {
       [
         { text: "Check Weather", callback_data: "admin:check_weather" },
         { text: "Status", callback_data: "admin:status" }
+      ],
+      [
+        { text: "Broadcast Weather", callback_data: "admin:broadcast_weather" }
       ]
     ]
   };
