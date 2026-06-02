@@ -77,8 +77,8 @@ export async function runCronWeatherCheck() {
   };
 }
 
-export async function runHourlyWeatherBroadcast() {
-  const weather = await getHourlyWeatherSummary();
+export async function runHourlyWeatherBroadcast(location = {}) {
+  const weather = await getHourlyWeatherSummary(location);
   await sendMessage(config.channelId, weather.summary);
   return {
     ok: true,
@@ -156,15 +156,35 @@ async function handleAdminCommand(text, chatId) {
   }
 
   if (command === "/weather_now") {
-    const weather = await getHourlyWeatherSummary();
+    const weather = await getHourlyWeatherSummary(parseLocationArgs(parts));
     await sendMessage(chatId, weather.summary, { reply_markup: adminKeyboard() });
     return;
   }
 
   if (command === "/broadcast_weather") {
-    const result = await runHourlyWeatherBroadcast();
+    const result = await runHourlyWeatherBroadcast(parseLocationArgs(parts));
     await sendMessage(chatId, "Weather update broadcasted.", { reply_markup: adminKeyboard() });
     return result;
+  }
+
+  if (command === "/weather_at") {
+    if (!rest) {
+      await sendMessage(chatId, "Usage: /weather_at Bishan OR /weather_at 1.3521 103.8198 Event Site");
+      return;
+    }
+    const weather = await getHourlyWeatherSummary(parseLocationArgs(parts));
+    await sendMessage(chatId, weather.summary, { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (command === "/broadcast_weather_at") {
+    if (!rest) {
+      await sendMessage(chatId, "Usage: /broadcast_weather_at Bishan OR /broadcast_weather_at 1.3521 103.8198 Event Site");
+      return;
+    }
+    await runHourlyWeatherBroadcast(parseLocationArgs(parts));
+    await sendMessage(chatId, "Location weather update broadcasted.", { reply_markup: adminKeyboard() });
+    return;
   }
 
   if (command === "/export_log") {
@@ -354,6 +374,24 @@ function formatServerlessStatus() {
     `Alert radius: ${config.lightningRadiusKm} km`,
     `Event location: ${config.eventLat}, ${config.eventLon}`
   ].join("\n");
+}
+
+function parseLocationArgs(parts = []) {
+  const [first, second, ...rest] = parts;
+  const lat = Number(first);
+  const lon = Number(second);
+
+  if (Number.isFinite(lat) && Number.isFinite(lon)) {
+    return {
+      lat,
+      lon,
+      label: rest.join(" ") || `${lat}, ${lon}`
+    };
+  }
+
+  return {
+    area: parts.join(" ").trim()
+  };
 }
 
 function reportLabel(action) {

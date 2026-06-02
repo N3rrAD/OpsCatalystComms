@@ -191,14 +191,34 @@ async function handleAdminCommand(text, chatId, user) {
   }
 
   if (command === "/weather_now") {
-    const weather = await getHourlyWeatherSummary();
+    const weather = await getHourlyWeatherSummary(parseLocationArgs(parts));
     await sendMessage(chatId, weather.summary, { reply_markup: adminKeyboard() });
     return;
   }
 
   if (command === "/broadcast_weather") {
-    await broadcastHourlyWeather();
+    await broadcastHourlyWeather(parseLocationArgs(parts));
     await sendMessage(chatId, "Weather update broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (command === "/weather_at") {
+    if (!rest) {
+      await sendMessage(chatId, "Usage: /weather_at Bishan OR /weather_at 1.3521 103.8198 Event Site");
+      return;
+    }
+    const weather = await getHourlyWeatherSummary(parseLocationArgs(parts));
+    await sendMessage(chatId, weather.summary, { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (command === "/broadcast_weather_at") {
+    if (!rest) {
+      await sendMessage(chatId, "Usage: /broadcast_weather_at Bishan OR /broadcast_weather_at 1.3521 103.8198 Event Site");
+      return;
+    }
+    await broadcastHourlyWeather(parseLocationArgs(parts));
+    await sendMessage(chatId, "Location weather update broadcasted.", { reply_markup: adminKeyboard() });
     return;
   }
 
@@ -374,8 +394,8 @@ async function runWeatherCheck(reason) {
   await broadcastCat1(result.summary, false);
 }
 
-async function broadcastHourlyWeather() {
-  const weather = await getHourlyWeatherSummary();
+async function broadcastHourlyWeather(location = {}) {
+  const weather = await getHourlyWeatherSummary(location);
   await sendMessage(config.channelId, weather.summary);
 }
 
@@ -460,6 +480,24 @@ function getForwardedChat(message) {
   if (message.forward_origin?.chat) return message.forward_origin.chat;
   if (message.forward_from_chat) return message.forward_from_chat;
   return null;
+}
+
+function parseLocationArgs(parts = []) {
+  const [first, second, ...rest] = parts;
+  const lat = Number(first);
+  const lon = Number(second);
+
+  if (Number.isFinite(lat) && Number.isFinite(lon)) {
+    return {
+      lat,
+      lon,
+      label: rest.join(" ") || `${lat}, ${lon}`
+    };
+  }
+
+  return {
+    area: parts.join(" ").trim()
+  };
 }
 
 function escapeHtml(value) {

@@ -119,14 +119,15 @@ export async function checkForecastContext() {
   };
 }
 
-export async function getHourlyWeatherSummary() {
+export async function getHourlyWeatherSummary(options = {}) {
+  const location = normalizeLocationOptions(options);
   const [twoHourResult, twentyFourHourResult] = await Promise.allSettled([
     fetchJson(config.twoHourForecastApiUrl),
     fetchJson(config.forecastApiUrl)
   ]);
 
   const twoHour = twoHourResult.status === "fulfilled"
-    ? summarizeTwoHourForecast(twoHourResult.value)
+    ? summarizeTwoHourForecast(twoHourResult.value, location)
     : { summary: `2-hour forecast unavailable: ${twoHourResult.reason.message}` };
   const twentyFourHour = twentyFourHourResult.status === "fulfilled"
     ? summarizeTwentyFourHourForecast(twentyFourHourResult.value)
@@ -144,6 +145,9 @@ export async function getHourlyWeatherSummary() {
     summary: [
       `<b>OCC WEATHER CHECK</b>`,
       `<code>${formatSingaporeDateTime(new Date())} SGT</code>`,
+      "",
+      `<b>Location</b>`,
+      `${escapeHtml(location.label)}`,
       "",
       `<b>Nearest Forecast Area</b>`,
       `${escapeHtml(twoHour.nearestArea || "Unknown")}`,
@@ -238,12 +242,13 @@ function isThunderRiskForecast(value) {
   );
 }
 
-function summarizeTwoHourForecast(payload) {
+function summarizeTwoHourForecast(payload, location) {
   const data = payload?.data || payload;
   const metadata = Array.isArray(data?.area_metadata) ? data.area_metadata : [];
   const item = Array.isArray(data?.items) ? data.items[0] : null;
   const forecasts = Array.isArray(item?.forecasts) ? item.forecasts : [];
-  const nearest = forecasts
+
+  const forecastAreas = forecasts
     .map((forecast) => {
       const areaMeta = metadata.find((area) => area.name === forecast.area);
       const lat = Number(areaMeta?.label_location?.latitude);
@@ -252,18 +257,39 @@ function summarizeTwoHourForecast(payload) {
         area: forecast.area,
         forecast: forecast.forecast || "",
         distanceKm: Number.isFinite(lat) && Number.isFinite(lon)
-          ? haversineKm(config.eventLat, config.eventLon, lat, lon)
+          ? haversineKm(location.lat, location.lon, lat, lon)
           : Number.POSITIVE_INFINITY
       };
     })
     .filter((area) => Number.isFinite(area.distanceKm))
-    .sort((a, b) => a.distanceKm - b.distanceKm)[0];
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+
+  const exactArea = location.area
+    ? forecastAreas.find((area) => area.area.toLowerCase() === location.area.toLowerCase())
+    : null;
+  const nearest = exactArea || forecastAreas[0];
 
   return {
     updated: item?.update_timestamp || item?.timestamp || "",
-    nearestArea: nearest ? `${nearest.area} (${nearest.distanceKm.toFixed(1)} km)` : "",
+    nearestArea: nearest ? exactArea ? `${nearest.area} (selected area)` : `${nearest.area} (${nearest.distanceKm.toFixed(1)} km)` : "",
     condition: nearest?.forecast || "",
     validPeriod: item?.valid_period?.text || ""
+  };
+}
+
+function normalizeLocationOptions(options) {
+  const lat = Number(options.lat ?? config.eventLat);
+  const lon = Number(options.lon ?? config.eventLon);
+  const area = typeof options.area === "string" ? options.area.trim() : "";
+  const label = typeof options.label === "string" && options.label.trim()
+    ? options.label.trim()
+    : area || config.eventLocationLabel;
+
+  return {
+    lat: Number.isFinite(lat) ? lat : config.eventLat,
+    lon: Number.isFinite(lon) ? lon : config.eventLon,
+    area,
+    label
   };
 }
 

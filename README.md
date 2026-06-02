@@ -115,6 +115,13 @@ https://YOUR-VERCEL-DOMAIN.vercel.app/api/hourly-weather?secret=YOUR_CRON_SECRET
 
 Set the external scheduler to once every 60 minutes.
 
+You can target a forecast area or coordinate:
+
+```text
+https://YOUR-VERCEL-DOMAIN.vercel.app/api/hourly-weather?secret=YOUR_CRON_SECRET&area=Bishan
+https://YOUR-VERCEL-DOMAIN.vercel.app/api/hourly-weather?secret=YOUR_CRON_SECRET&lat=1.3521&lon=103.8198&label=Event%20Site
+```
+
 ## Useful Commands
 
 Admin-only:
@@ -128,6 +135,9 @@ Admin-only:
 /check_weather
 /weather_now
 /broadcast_weather
+/weather_at Bishan
+/weather_at 1.3521 103.8198 Event Site
+/broadcast_weather_at Bishan
 /broadcast Your message here
 /export_log
 ```

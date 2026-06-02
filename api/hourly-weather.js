@@ -16,7 +16,12 @@ export default async function handler(request, response) {
   }
 
   try {
-    const result = await runHourlyWeatherBroadcast();
+    const result = await runHourlyWeatherBroadcast({
+      area: url.searchParams.get("area") || "",
+      lat: url.searchParams.get("lat") || "",
+      lon: url.searchParams.get("lon") || "",
+      label: url.searchParams.get("label") || ""
+    });
     response.status(200).json(result);
   } catch (error) {
     console.error(error);

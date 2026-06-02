@@ -10,6 +10,7 @@ export const config = {
   adminUserIds: parseList(process.env.ADMIN_USER_IDS).map((id) => Number(id)).filter(Boolean),
   eventLat: numberEnv("EVENT_LAT", 1.3521),
   eventLon: numberEnv("EVENT_LON", 103.8198),
+  eventLocationLabel: process.env.EVENT_LOCATION_LABEL || "Event site",
   lightningRadiusKm: numberEnv("LIGHTNING_RADIUS_KM", 12),
   weatherPollSeconds: Math.max(30, numberEnv("WEATHER_POLL_SECONDS", 120)),
   lightningApiUrl: process.env.LIGHTNING_API_URL || "https://api-open.data.gov.sg/v2/real-time/api/lightning",
