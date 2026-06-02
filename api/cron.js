@@ -8,7 +8,9 @@ export default async function handler(request, response) {
 
   const cronSecret = process.env.CRON_SECRET || "";
   const authHeader = request.headers.authorization || "";
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  const url = new URL(request.url, `https://${request.headers.host || "localhost"}`);
+  const querySecret = url.searchParams.get("secret") || "";
+  if (cronSecret && authHeader !== `Bearer ${cronSecret}` && querySecret !== cronSecret) {
     response.status(401).json({ ok: false, error: "Unauthorized" });
     return;
   }

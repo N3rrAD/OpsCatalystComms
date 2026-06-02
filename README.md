@@ -37,7 +37,7 @@ Keep `TELEGRAM_BOT_TOKEN` in `.env` only. If the token is ever pasted into chat 
 Vercel cannot keep `npm start` running 24/7 as a long-polling process. This repo includes a Vercel-safe version:
 
 - `/api/telegram` receives Telegram webhook updates
-- `/api/cron` is called by Vercel Cron every 5 minutes
+- `/api/cron` performs the weather check when called by Vercel Cron, cron-job.org, UptimeRobot, or another scheduler
 - `/api/health` confirms the deployment is alive
 
 Set these Vercel environment variables:
@@ -76,6 +76,32 @@ Invoke-RestMethod -Uri "https://api.telegram.org/bot$botToken/getWebhookInfo"
 ```
 
 Note: the Vercel cron route is stateless. If lightning risk is detected on every cron run, it may broadcast every scheduled run. Keep the cron schedule conservative, or add persistent storage later if you want cooldown tracking in production.
+
+### Weather Scheduler
+
+Vercel Hobby accounts only allow daily cron jobs. For frequent CAT1 checks, either:
+
+- use Vercel Pro and add this to `vercel.json`:
+
+```json
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "crons": [
+    {
+      "path": "/api/cron",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
+```
+
+- or keep the current `vercel.json` and create an external scheduler that calls:
+
+```text
+https://YOUR-VERCEL-DOMAIN.vercel.app/api/cron?secret=YOUR_CRON_SECRET
+```
+
+Every 5 minutes is a reasonable starting point.
 
 ## Useful Commands
 
