@@ -142,18 +142,25 @@ export async function getHourlyWeatherSummary() {
     wind: twentyFourHour.wind || "unknown",
     regionalForecast: twentyFourHour.regionalForecast || "",
     summary: [
-      `<b>Hourly Weather Check</b>`,
+      `<b>OCC WEATHER CHECK</b>`,
+      `${formatSingaporeDateTime(new Date())}`,
       "",
-      `Nearest area: ${escapeHtml(twoHour.nearestArea || "unknown")}`,
-      `Condition: ${escapeHtml(twoHour.condition || "unknown")}`,
-      twoHour.validPeriod ? `Valid: ${escapeHtml(twoHour.validPeriod)}` : "",
+      `<b>Nearest Forecast Area</b>`,
+      `${escapeHtml(twoHour.nearestArea || "Unknown")}`,
       "",
-      `Temperature: ${escapeHtml(twentyFourHour.temperature || "unknown")}`,
-      `Humidity: ${escapeHtml(twentyFourHour.humidity || "unknown")}`,
-      `Wind: ${escapeHtml(twentyFourHour.wind || "unknown")}`,
-      twentyFourHour.regionalForecast ? `Region outlook: ${escapeHtml(twentyFourHour.regionalForecast)}` : "",
+      `<b>Current Outlook</b>`,
+      `${weatherIcon(twoHour.condition)} ${escapeHtml(twoHour.condition || "Unknown")}`,
+      twoHour.validPeriod ? `Valid ${escapeHtml(twoHour.validPeriod)}` : "",
       "",
-      "Note: forecast checks are situational awareness only, not confirmed CAT1."
+      `<b>Environment</b>`,
+      `Temp ${escapeHtml(twentyFourHour.temperature || "Unknown")}`,
+      `Humidity ${escapeHtml(twentyFourHour.humidity || "Unknown")}`,
+      `Wind ${escapeHtml(twentyFourHour.wind || "Unknown")}`,
+      twentyFourHour.regionalForecast ? "" : "",
+      twentyFourHour.regionalForecast ? `<b>Regional Outlook</b>` : "",
+      twentyFourHour.regionalForecast ? escapeHtml(twentyFourHour.regionalForecast) : "",
+      "",
+      `<i>For awareness only. This is not confirmed CAT1.</i>`
     ]
       .filter(Boolean)
       .join("\n")
@@ -276,8 +283,8 @@ function summarizeTwentyFourHourForecast(payload) {
   const currentPeriod = Array.isArray(record?.periods) ? record.periods[0] : null;
   const regionalForecast = currentPeriod?.regions
     ? Object.entries(currentPeriod.regions)
-        .map(([region, value]) => `${region}: ${value?.text || value?.code || JSON.stringify(value)}`)
-        .join("; ")
+        .map(([region, value]) => `${titleCase(region)} ${compactForecast(value?.text || value?.code || JSON.stringify(value))}`)
+        .join(" | ")
     : general.forecast?.text || "";
 
   return {
@@ -287,6 +294,40 @@ function summarizeTwentyFourHourForecast(payload) {
     wind,
     regionalForecast
   };
+}
+
+function compactForecast(value) {
+  return String(value || "")
+    .replaceAll("Partly Cloudy", "Partly cloudy")
+    .replaceAll("Thundery Showers", "Thundery showers")
+    .replaceAll("Heavy Thundery Showers", "Heavy thundery showers");
+}
+
+function titleCase(value) {
+  const text = String(value || "");
+  return text ? text[0].toUpperCase() + text.slice(1) : text;
+}
+
+function weatherIcon(value) {
+  const text = String(value || "").toLowerCase();
+  if (text.includes("thunder")) return "!";
+  if (text.includes("rain") || text.includes("showers")) return "~";
+  if (text.includes("cloud")) return "*";
+  if (text.includes("fair") || text.includes("warm")) return "+";
+  if (text.includes("hazy") || text.includes("mist") || text.includes("fog")) return "-";
+  if (text.includes("wind")) return ">";
+  return "-";
+}
+
+function formatSingaporeDateTime(date) {
+  return new Intl.DateTimeFormat("en-SG", {
+    timeZone: "Asia/Singapore",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date);
 }
 
 function escapeHtml(value) {
