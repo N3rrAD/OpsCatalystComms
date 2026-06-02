@@ -143,26 +143,26 @@ export async function getHourlyWeatherSummary() {
     regionalForecast: twentyFourHour.regionalForecast || "",
     summary: [
       `<b>OCC WEATHER CHECK</b>`,
-      `${formatSingaporeDateTime(new Date())}`,
+      `<code>${formatSingaporeDateTime(new Date())} SGT</code>`,
       "",
       `<b>Nearest Forecast Area</b>`,
       `${escapeHtml(twoHour.nearestArea || "Unknown")}`,
       "",
       `<b>Current Outlook</b>`,
-      `${weatherIcon(twoHour.condition)} ${escapeHtml(twoHour.condition || "Unknown")}`,
-      twoHour.validPeriod ? `Valid ${escapeHtml(twoHour.validPeriod)}` : "",
+      `${escapeHtml(twoHour.condition || "Unknown")}`,
+      twoHour.validPeriod ? `Valid: ${escapeHtml(twoHour.validPeriod)}` : "",
       "",
       `<b>Environment</b>`,
-      `Temp ${escapeHtml(twentyFourHour.temperature || "Unknown")}`,
-      `Humidity ${escapeHtml(twentyFourHour.humidity || "Unknown")}`,
-      `Wind ${escapeHtml(twentyFourHour.wind || "Unknown")}`,
+      `Temp: ${escapeHtml(twentyFourHour.temperature || "Unknown")}`,
+      `Humidity: ${escapeHtml(twentyFourHour.humidity || "Unknown")}`,
+      `Wind: ${escapeHtml(twentyFourHour.wind || "Unknown")}`,
       twentyFourHour.regionalForecast ? "" : "",
       twentyFourHour.regionalForecast ? `<b>Regional Outlook</b>` : "",
       twentyFourHour.regionalForecast ? escapeHtml(twentyFourHour.regionalForecast) : "",
       "",
-      `<i>For awareness only. This is not confirmed CAT1.</i>`
+      `<i>Awareness only. Not confirmed CAT1.</i>`
     ]
-      .filter(Boolean)
+      .filter((line) => line !== false && line !== null && line !== undefined)
       .join("\n")
   };
 }
@@ -283,8 +283,8 @@ function summarizeTwentyFourHourForecast(payload) {
   const currentPeriod = Array.isArray(record?.periods) ? record.periods[0] : null;
   const regionalForecast = currentPeriod?.regions
     ? Object.entries(currentPeriod.regions)
-        .map(([region, value]) => `${titleCase(region)} ${compactForecast(value?.text || value?.code || JSON.stringify(value))}`)
-        .join(" | ")
+        .map(([region, value]) => `${titleCase(region)}: ${compactForecast(value?.text || value?.code || JSON.stringify(value))}`)
+        .join("\n")
     : general.forecast?.text || "";
 
   return {
@@ -306,17 +306,6 @@ function compactForecast(value) {
 function titleCase(value) {
   const text = String(value || "");
   return text ? text[0].toUpperCase() + text.slice(1) : text;
-}
-
-function weatherIcon(value) {
-  const text = String(value || "").toLowerCase();
-  if (text.includes("thunder")) return "!";
-  if (text.includes("rain") || text.includes("showers")) return "~";
-  if (text.includes("cloud")) return "*";
-  if (text.includes("fair") || text.includes("warm")) return "+";
-  if (text.includes("hazy") || text.includes("mist") || text.includes("fog")) return "-";
-  if (text.includes("wind")) return ">";
-  return "-";
 }
 
 function formatSingaporeDateTime(date) {
