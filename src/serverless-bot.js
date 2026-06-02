@@ -1,4 +1,5 @@
 import { config, isAdmin } from "./config.js";
+import { buildCat1Window, formatCat1Window } from "./cat1-window.js";
 import { checkForecastContext, checkLightningRisk } from "./weather.js";
 import {
   answerCallback,
@@ -80,7 +81,8 @@ async function handleAdminCommand(text, chatId) {
   const rest = parts.join(" ");
 
   if (command === "/cat1_on") {
-    await broadcastCat1("Manual CAT1 activation by Chief/Admin.", true);
+    const window = buildCat1Window(parts);
+    await broadcastCat1("Manual CAT1 activation by Chief/Admin.", true, window);
     await sendMessage(chatId, "CAT1 activated and broadcasted.");
     return;
   }
@@ -197,9 +199,11 @@ async function handleChannelPost(message) {
   );
 }
 
-async function broadcastCat1(reason, manual) {
+async function broadcastCat1(reason, manual, window = buildCat1Window()) {
   const message = [
     manual ? "<b>CAT1 ACTIVATED</b>" : "<b>CAT1 / LIGHTNING RISK DETECTED</b>",
+    "",
+    `<b>CAT1 Window:</b> ${escapeHtml(formatCat1Window(window))}`,
     "",
     escapeHtml(reason),
     "",

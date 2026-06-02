@@ -17,6 +17,7 @@ export const config = {
     process.env.FORECAST_API_URL || "https://api-open.data.gov.sg/v2/real-time/api/twenty-four-hr-forecast",
   dataGovApiKey: process.env.DATA_GOV_API_KEY || "",
   alertCooldownMinutes: numberEnv("ALERT_COOLDOWN_MINUTES", 20),
+  cat1DefaultDurationMinutes: numberEnv("CAT1_DEFAULT_DURATION_MINUTES", 30),
   dryRunWeather: boolEnv("DRY_RUN_WEATHER", false),
   statePath: path.resolve("data", "state.json"),
   logPath: path.resolve("logs", "cat1-events.csv")

@@ -118,6 +118,16 @@ Admin-only:
 /export_log
 ```
 
+`/cat1_on` supports a CAT1 timing window:
+
+```text
+/cat1_on
+/cat1_on 45
+/cat1_on 1430 1530
+```
+
+No arguments uses `CAT1_DEFAULT_DURATION_MINUTES`. One number means "from now for this many minutes". Two clock values mean "from this time to this time" in Singapore time.
+
 Any user can DM:
 
 ```text
