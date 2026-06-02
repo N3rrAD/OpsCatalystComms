@@ -67,7 +67,7 @@ export function getUpdates(offset) {
   return telegram("getUpdates", {
     offset,
     timeout: 25,
-    allowed_updates: ["message", "channel_post", "callback_query"]
+    allowed_updates: ["message", "edited_message", "channel_post", "callback_query"]
   });
 }
 
@@ -125,5 +125,20 @@ export function adminKeyboard() {
         { text: "Broadcast Weather", callback_data: "admin:broadcast_weather" }
       ]
     ]
+  };
+}
+
+export function locationRequestKeyboard() {
+  return {
+    keyboard: [
+      [
+        {
+          text: "Share Current Location",
+          request_location: true
+        }
+      ]
+    ],
+    resize_keyboard: true,
+    one_time_keyboard: true
   };
 }

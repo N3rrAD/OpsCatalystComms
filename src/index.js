@@ -6,6 +6,7 @@ import {
   adminKeyboard,
   answerCallback,
   getUpdates,
+  locationRequestKeyboard,
   opsKeyboard,
   safetyKeyboard,
   sendDocument,
@@ -69,7 +70,17 @@ async function handleUpdate(update) {
     return;
   }
 
+  if (update.edited_message?.location) {
+    await handleLocationMessage(update.edited_message, true);
+    return;
+  }
+
   const message = update.message;
+  if (message?.location) {
+    await handleLocationMessage(message, false);
+    return;
+  }
+
   if (!message?.text) return;
 
   const text = message.text.trim();
@@ -212,6 +223,20 @@ async function handleAdminCommand(text, chatId, user) {
     return;
   }
 
+  if (command === "/track_location" || command === "/share_location") {
+    await sendMessage(
+      chatId,
+      [
+        "<b>Share Location</b>",
+        "",
+        "Tap the button below and send your current or live location.",
+        "The bot will generate weather for the shared coordinates."
+      ].join("\n"),
+      { reply_markup: locationRequestKeyboard() }
+    );
+    return;
+  }
+
   if (command === "/broadcast_weather_at") {
     if (!rest) {
       await sendMessage(chatId, "Usage: /broadcast_weather_at Bishan OR /broadcast_weather_at 1.3521 103.8198 Event Site");
@@ -239,6 +264,30 @@ async function handleAdminCommand(text, chatId, user) {
   }
 
   await sendMessage(chatId, "Unknown admin command. Try /status or /help.");
+}
+
+async function handleLocationMessage(message, isLiveUpdate) {
+  const chatId = message.chat.id;
+  const user = message.from || {};
+  const location = message.location;
+  const label = isLiveUpdate
+    ? `Live location from ${formatUser(user) || "user"}`
+    : `Shared location from ${formatUser(user) || "user"}`;
+  const weather = await getHourlyWeatherSummary({
+    lat: location.latitude,
+    lon: location.longitude,
+    label
+  });
+
+  await sendMessage(
+    chatId,
+    [
+      isLiveUpdate ? "<b>Live Location Weather Update</b>" : "<b>Location Weather</b>",
+      "",
+      weather.summary
+    ].join("\n"),
+    isAdmin(user.id) ? { reply_markup: adminKeyboard() } : {}
+  );
 }
 
 async function handleCallback(callbackQuery) {

@@ -138,11 +138,24 @@ Admin-only:
 /weather_at Bishan
 /weather_at 1.3521 103.8198 Event Site
 /broadcast_weather_at Bishan
+/track_location
 /broadcast Your message here
 /export_log
 ```
 
 Admins also get an inline control panel after `/start` or `/help`, with buttons for activating CAT1, all-clear, pause/resume, weather check, status, and broadcasting the latest weather.
+
+## Location-Based Weather
+
+Users can DM the bot:
+
+```text
+/track_location
+```
+
+The bot will show a Telegram location-share button. If the user shares current location, the bot replies with weather for those coordinates. If the user shares live location, Telegram sends location updates as the location changes, and the bot replies with updated weather.
+
+On Vercel this is reactive to incoming live-location updates. True "remember this live location and check it every hour later" needs persistent storage such as Redis, Supabase, or another database.
 
 `/cat1_on` supports a CAT1 timing window:
 

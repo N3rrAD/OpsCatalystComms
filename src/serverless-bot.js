@@ -4,6 +4,7 @@ import { checkForecastContext, checkLightningRisk, getHourlyWeatherSummary } fro
 import {
   adminKeyboard,
   answerCallback,
+  locationRequestKeyboard,
   opsKeyboard,
   safetyKeyboard,
   sendMessage
@@ -20,7 +21,17 @@ export async function handleTelegramUpdate(update) {
     return { ok: true, type: "channel_post" };
   }
 
+  if (update.edited_message?.location) {
+    await handleLocationMessage(update.edited_message, true);
+    return { ok: true, type: "edited_location" };
+  }
+
   const message = update.message;
+  if (message?.location) {
+    await handleLocationMessage(message, false);
+    return { ok: true, type: "location" };
+  }
+
   if (!message?.text) return { ok: true, type: "ignored" };
 
   const text = message.text.trim();
@@ -43,7 +54,7 @@ export async function handleTelegramUpdate(update) {
           : "To find a private channel id, add this bot as channel admin, then forward one channel post here.",
         "",
         "Admin commands:",
-        "/cat1_on, /cat1_off, /pause_event, /resume_event, /status, /check_weather, /broadcast"
+        "/cat1_on, /cat1_off, /pause_event, /resume_event, /status, /check_weather, /track_location, /broadcast"
       ].join("\n"),
       isAdmin(user.id) ? { reply_markup: adminKeyboard() } : {}
     );
@@ -177,6 +188,22 @@ async function handleAdminCommand(text, chatId) {
     return;
   }
 
+  if (command === "/track_location" || command === "/share_location") {
+    await sendMessage(
+      chatId,
+      [
+        "<b>Share Location</b>",
+        "",
+        "Tap the button below and send your current or live location.",
+        "The bot will generate weather for the shared coordinates.",
+        "",
+        "For live hourly tracking on Vercel, we still need persistent storage."
+      ].join("\n"),
+      { reply_markup: locationRequestKeyboard() }
+    );
+    return;
+  }
+
   if (command === "/broadcast_weather_at") {
     if (!rest) {
       await sendMessage(chatId, "Usage: /broadcast_weather_at Bishan OR /broadcast_weather_at 1.3521 103.8198 Event Site");
@@ -203,6 +230,30 @@ async function handleAdminCommand(text, chatId) {
   }
 
   await sendMessage(chatId, "Unknown admin command. Try /status or /help.");
+}
+
+async function handleLocationMessage(message, isLiveUpdate) {
+  const chatId = message.chat.id;
+  const user = message.from || {};
+  const location = message.location;
+  const label = isLiveUpdate
+    ? `Live location from ${formatUser(user) || "user"}`
+    : `Shared location from ${formatUser(user) || "user"}`;
+  const weather = await getHourlyWeatherSummary({
+    lat: location.latitude,
+    lon: location.longitude,
+    label
+  });
+
+  await sendMessage(
+    chatId,
+    [
+      isLiveUpdate ? "<b>Live Location Weather Update</b>" : "<b>Location Weather</b>",
+      "",
+      weather.summary
+    ].join("\n"),
+    isAdmin(user.id) ? { reply_markup: adminKeyboard() } : {}
+  );
 }
 
 async function handleCallback(callbackQuery) {
