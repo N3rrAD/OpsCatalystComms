@@ -105,3 +105,22 @@ export function opsKeyboard() {
     ]
   };
 }
+
+export function adminKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: "Activate CAT1", callback_data: "admin:cat1_on" },
+        { text: "All Clear", callback_data: "admin:cat1_off" }
+      ],
+      [
+        { text: "Pause Event", callback_data: "admin:pause_event" },
+        { text: "Resume Event", callback_data: "admin:resume_event" }
+      ],
+      [
+        { text: "Check Weather", callback_data: "admin:check_weather" },
+        { text: "Status", callback_data: "admin:status" }
+      ]
+    ]
+  };
+}

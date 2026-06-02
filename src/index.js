@@ -3,6 +3,7 @@ import { buildCat1Window, formatCat1Window } from "./cat1-window.js";
 import { ensureLogFile, logEvent } from "./logger.js";
 import { loadState, saveState } from "./state.js";
 import {
+  adminKeyboard,
   answerCallback,
   getUpdates,
   opsKeyboard,
@@ -94,7 +95,8 @@ async function handleUpdate(update) {
         "/cat1_on, /cat1_off, /pause_event, /resume_event, /status, /check_weather, /export_log",
         "",
         "For channel reports, use the buttons on broadcast messages."
-      ].join("\n")
+      ].join("\n"),
+      isAdmin(user.id) ? { reply_markup: adminKeyboard() } : {}
     );
     return;
   }
@@ -212,6 +214,11 @@ async function handleCallback(callbackQuery) {
   const user = callbackQuery.from || {};
   const actorName = formatUser(user);
 
+  if (data.startsWith("admin:")) {
+    await handleAdminCallback(callbackQuery);
+    return;
+  }
+
   if (!data.startsWith("report:")) {
     await answerCallback(callbackQuery.id, "Unknown action.");
     return;
@@ -240,6 +247,86 @@ async function handleCallback(callbackQuery) {
       `Time: ${new Date().toLocaleString("en-SG", { timeZone: "Asia/Singapore" })}`
     ].join("\n")
   );
+}
+
+async function handleAdminCallback(callbackQuery) {
+  const user = callbackQuery.from || {};
+  const action = (callbackQuery.data || "").slice("admin:".length);
+  const chatId = callbackQuery.message?.chat?.id || user.id;
+
+  if (!isAdmin(user.id)) {
+    await answerCallback(callbackQuery.id, "Admin-only action.", true);
+    return;
+  }
+
+  await answerCallback(callbackQuery.id, "Working...");
+
+  if (action === "cat1_on") {
+    const window = buildCat1Window();
+    state.cat1Active = true;
+    state.eventPaused = true;
+    saveState(state);
+    logCommand(user, "/cat1_on_button", { details: "Manual CAT1 activated", window: formatCat1Window(window) });
+    await broadcastCat1("Manual CAT1 activation by Chief/Admin.", true, window);
+    await sendMessage(chatId, "CAT1 activated and broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (action === "cat1_off") {
+    state.cat1Active = false;
+    saveState(state);
+    logCommand(user, "/cat1_off_button", "Manual all-clear");
+    await sendMessage(
+      config.channelId,
+      [
+        "<b>CAT1 ALL CLEAR</b>",
+        "",
+        "Chief/Admin has marked CAT1 as cleared.",
+        "Resume only when the chief facilitator gives instructions."
+      ].join("\n"),
+      { reply_markup: safetyKeyboard() }
+    );
+    await sendMessage(chatId, "CAT1 cleared and broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (action === "pause_event") {
+    state.eventPaused = true;
+    saveState(state);
+    logCommand(user, "/pause_event_button", "Event paused");
+    await sendMessage(config.channelId, "<b>EVENT PAUSED</b>\n\nStop new claims and await Chief Facilitator instruction.", {
+      reply_markup: opsKeyboard()
+    });
+    await sendMessage(chatId, "Event pause broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (action === "resume_event") {
+    state.eventPaused = false;
+    saveState(state);
+    logCommand(user, "/resume_event_button", "Event resumed");
+    await sendMessage(config.channelId, "<b>EVENT RESUMED</b>\n\nContinue only under facilitator instructions.", {
+      reply_markup: opsKeyboard()
+    });
+    await sendMessage(chatId, "Event resume broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (action === "status") {
+    await sendMessage(chatId, formatStatus(), { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (action === "check_weather") {
+    await runWeatherCheck("manual-button");
+    const forecast = await safeForecast();
+    await sendMessage(chatId, `${formatStatus()}\n\n<b>Forecast context</b>\n${escapeHtml(forecast)}`, {
+      reply_markup: adminKeyboard()
+    });
+    return;
+  }
+
+  await sendMessage(chatId, "Unknown admin action.", { reply_markup: adminKeyboard() });
 }
 
 async function runWeatherCheck(reason) {

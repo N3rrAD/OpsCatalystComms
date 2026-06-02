@@ -2,10 +2,10 @@ import { config, isAdmin } from "./config.js";
 import { buildCat1Window, formatCat1Window } from "./cat1-window.js";
 import { checkForecastContext, checkLightningRisk } from "./weather.js";
 import {
+  adminKeyboard,
   answerCallback,
   opsKeyboard,
   safetyKeyboard,
-  sendDocument,
   sendMessage
 } from "./telegram.js";
 
@@ -44,7 +44,8 @@ export async function handleTelegramUpdate(update) {
         "",
         "Admin commands:",
         "/cat1_on, /cat1_off, /pause_event, /resume_event, /status, /check_weather, /broadcast"
-      ].join("\n")
+      ].join("\n"),
+      isAdmin(user.id) ? { reply_markup: adminKeyboard() } : {}
     );
     return { ok: true, type: "help" };
   }
@@ -167,6 +168,11 @@ async function handleCallback(callbackQuery) {
   const user = callbackQuery.from || {};
   const actorName = formatUser(user);
 
+  if (data.startsWith("admin:")) {
+    await handleAdminCallback(callbackQuery);
+    return;
+  }
+
   if (!data.startsWith("report:")) {
     await answerCallback(callbackQuery.id, "Unknown action.");
     return;
@@ -183,6 +189,86 @@ async function handleCallback(callbackQuery) {
       `Time: ${new Date().toLocaleString("en-SG", { timeZone: "Asia/Singapore" })}`
     ].join("\n")
   );
+}
+
+async function handleAdminCallback(callbackQuery) {
+  const user = callbackQuery.from || {};
+  const action = (callbackQuery.data || "").slice("admin:".length);
+  const chatId = callbackQuery.message?.chat?.id || user.id;
+
+  if (!isAdmin(user.id)) {
+    await answerCallback(callbackQuery.id, "Admin-only action.", true);
+    return;
+  }
+
+  await answerCallback(callbackQuery.id, "Working...");
+
+  if (action === "cat1_on") {
+    const window = buildCat1Window();
+    await broadcastCat1("Manual CAT1 activation by Chief/Admin.", true, window);
+    await sendMessage(chatId, "CAT1 activated and broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (action === "cat1_off") {
+    await sendMessage(
+      config.channelId,
+      [
+        "<b>CAT1 ALL CLEAR</b>",
+        "",
+        "Chief/Admin has marked CAT1 as cleared.",
+        "Resume only when the chief facilitator gives instructions."
+      ].join("\n"),
+      { reply_markup: safetyKeyboard() }
+    );
+    await sendMessage(chatId, "CAT1 cleared and broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (action === "pause_event") {
+    await sendMessage(config.channelId, "<b>EVENT PAUSED</b>\n\nStop new claims and await Chief Facilitator instruction.", {
+      reply_markup: opsKeyboard()
+    });
+    await sendMessage(chatId, "Event pause broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (action === "resume_event") {
+    await sendMessage(config.channelId, "<b>EVENT RESUMED</b>\n\nContinue only under facilitator instructions.", {
+      reply_markup: opsKeyboard()
+    });
+    await sendMessage(chatId, "Event resume broadcasted.", { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (action === "status") {
+    await sendMessage(chatId, formatServerlessStatus(), { reply_markup: adminKeyboard() });
+    return;
+  }
+
+  if (action === "check_weather") {
+    const lightning = await checkLightningRisk().catch((error) => ({
+      summary: `Lightning check failed: ${error.message}`,
+      risk: false
+    }));
+    const forecast = await safeForecast();
+    await sendMessage(
+      chatId,
+      [
+        "<b>Weather Check</b>",
+        "",
+        `Lightning risk: ${lightning.risk ? "YES" : "NO"}`,
+        escapeHtml(lightning.summary),
+        "",
+        "<b>Forecast context</b>",
+        escapeHtml(forecast)
+      ].join("\n"),
+      { reply_markup: adminKeyboard() }
+    );
+    return;
+  }
+
+  await sendMessage(chatId, "Unknown admin action.", { reply_markup: adminKeyboard() });
 }
 
 async function handleChannelPost(message) {

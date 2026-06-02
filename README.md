@@ -118,6 +118,8 @@ Admin-only:
 /export_log
 ```
 
+Admins also get an inline control panel after `/start` or `/help`, with buttons for activating CAT1, all-clear, pause/resume, weather check, and status.
+
 `/cat1_on` supports a CAT1 timing window:
 
 ```text
