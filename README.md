@@ -55,7 +55,10 @@ DATA_GOV_API_KEY
 FORECAST_API_URL
 TELEGRAM_WEBHOOK_SECRET
 CRON_SECRET
+TWO_HOUR_FORECAST_API_URL
 ```
+
+If the Lightning Observation endpoint is unavailable, the bot falls back to the official 2-hour forecast and treats nearby "Thundery Showers" / "Heavy Thundery Showers" wording as a weather-risk alert. This is not the same as confirmed CAT1.
 
 After deployment, set the Telegram webhook:
 

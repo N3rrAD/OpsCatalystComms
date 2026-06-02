@@ -12,7 +12,13 @@ export async function checkLightningRisk() {
     };
   }
 
-  const response = await fetchJson(config.lightningApiUrl);
+  let response;
+  try {
+    response = await fetchJson(config.lightningApiUrl);
+  } catch (error) {
+    return checkTwoHourForecastRisk(error);
+  }
+
   const events = extractLightningEvents(response);
   const withDistance = events
     .map((event) => ({
@@ -36,6 +42,62 @@ export async function checkLightningRisk() {
       : events.length
         ? `No lightning observations within ${config.lightningRadiusKm} km. Nearest ${nearest.distanceKm.toFixed(1)} km.`
         : "No parseable lightning observations found in API response."
+  };
+}
+
+async function checkTwoHourForecastRisk(lightningError) {
+  const response = await fetchJson(config.twoHourForecastApiUrl);
+  const data = response?.data || response;
+  const metadata = Array.isArray(data?.area_metadata) ? data.area_metadata : [];
+  const item = Array.isArray(data?.items) ? data.items[0] : null;
+  const forecasts = Array.isArray(item?.forecasts) ? item.forecasts : [];
+
+  const areas = forecasts
+    .map((forecast) => {
+      const areaMeta = metadata.find((area) => area.name === forecast.area);
+      const lat = Number(areaMeta?.label_location?.latitude);
+      const lon = Number(areaMeta?.label_location?.longitude);
+      const distanceKm = Number.isFinite(lat) && Number.isFinite(lon)
+        ? haversineKm(config.eventLat, config.eventLon, lat, lon)
+        : Number.POSITIVE_INFINITY;
+
+      return {
+        area: forecast.area,
+        forecast: forecast.forecast || "",
+        distanceKm
+      };
+    })
+    .filter((area) => Number.isFinite(area.distanceKm))
+    .sort((a, b) => a.distanceKm - b.distanceKm);
+
+  const nearby = areas.filter((area) => area.distanceKm <= config.lightningRadiusKm);
+  const relevant = nearby.length ? nearby : areas.slice(0, 3);
+  const risky = relevant.filter((area) => isThunderRiskForecast(area.forecast));
+  const nearest = areas[0];
+  const validText = item?.valid_period?.text || "";
+
+  return {
+    source: config.twoHourForecastApiUrl,
+    risk: risky.length > 0,
+    nearestKm: nearest ? nearest.distanceKm : null,
+    lightningCount: 0,
+    nearbyCount: risky.length,
+    summary: risky.length
+      ? [
+          `Lightning API unavailable (${lightningError.message}).`,
+          `2-hour forecast risk near event area: ${risky
+            .map((area) => `${area.area} - ${area.forecast} (${area.distanceKm.toFixed(1)} km)`)
+            .join("; ")}.`,
+          validText ? `Valid period: ${validText}.` : ""
+        ]
+          .filter(Boolean)
+          .join(" ")
+      : [
+          `Lightning API unavailable (${lightningError.message}).`,
+          nearest
+            ? `2-hour forecast fallback found no thundery-shower forecast near event area. Nearest area: ${nearest.area} - ${nearest.forecast} (${nearest.distanceKm.toFixed(1)} km).`
+            : "2-hour forecast fallback found no parseable area forecasts."
+        ].join(" ")
   };
 }
 
@@ -117,6 +179,15 @@ function dedupeEvents(events) {
     seen.add(key);
     return true;
   });
+}
+
+function isThunderRiskForecast(value) {
+  const text = String(value || "").toLowerCase();
+  return (
+    text.includes("thundery") ||
+    text.includes("thunder") ||
+    text.includes("heavy showers with gusty winds")
+  );
 }
 
 function haversineKm(lat1, lon1, lat2, lon2) {

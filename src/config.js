@@ -13,6 +13,8 @@ export const config = {
   lightningRadiusKm: numberEnv("LIGHTNING_RADIUS_KM", 12),
   weatherPollSeconds: Math.max(30, numberEnv("WEATHER_POLL_SECONDS", 120)),
   lightningApiUrl: process.env.LIGHTNING_API_URL || "https://api-open.data.gov.sg/v2/real-time/api/lightning",
+  twoHourForecastApiUrl:
+    process.env.TWO_HOUR_FORECAST_API_URL || "https://api-open.data.gov.sg/v2/real-time/api/two-hr-forecast",
   forecastApiUrl:
     process.env.FORECAST_API_URL || "https://api-open.data.gov.sg/v2/real-time/api/twenty-four-hr-forecast",
   dataGovApiKey: process.env.DATA_GOV_API_KEY || "",
