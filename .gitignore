@@ -2,5 +2,6 @@ node_modules/
 .env
 data/*.json
 logs/*.csv
+.vercel-runtime-secrets.txt
 
 .vercel
