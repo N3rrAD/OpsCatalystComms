@@ -106,6 +106,40 @@ export function opsKeyboard() {
   };
 }
 
+export function facilitatorKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: "Need Support", callback_data: "fac:need_support" },
+        { text: "Safety/Medical", callback_data: "fac:safety_medical" }
+      ],
+      [
+        { text: "Station Issue", callback_data: "fac:station_issue" },
+        { text: "Logistics", callback_data: "fac:logistics" }
+      ],
+      [
+        { text: "Weather Concern", callback_data: "fac:weather_concern" },
+        { text: "Resolved", callback_data: "fac:resolved" }
+      ]
+    ]
+  };
+}
+
+export function adminResponseKeyboard(userId) {
+  return {
+    inline_keyboard: [
+      [
+        { text: "Acknowledge", callback_data: `reply:ack:${userId}` },
+        { text: "Need Details", callback_data: `reply:details:${userId}` }
+      ],
+      [
+        { text: "Mark Resolved", callback_data: `reply:resolved:${userId}` },
+        { text: "Ask to Call", callback_data: `reply:call:${userId}` }
+      ]
+    ]
+  };
+}
+
 export function adminKeyboard() {
   return {
     inline_keyboard: [

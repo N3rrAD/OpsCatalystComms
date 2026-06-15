@@ -3,7 +3,9 @@ import { buildCat1Window, formatCat1Window } from "./cat1-window.js";
 import { checkForecastContext, checkLightningRisk, getHourlyWeatherSummary } from "./weather.js";
 import {
   adminKeyboard,
+  adminResponseKeyboard,
   answerCallback,
+  facilitatorKeyboard,
   locationRequestKeyboard,
   opsKeyboard,
   safetyKeyboard,
@@ -40,30 +42,47 @@ export async function handleTelegramUpdate(update) {
 
   if (text === "/start" || text === "/help") {
     const forwardedChat = getForwardedChat(message);
+    const admin = isAdmin(user.id);
     await sendMessage(
       chatId,
-      [
-        "<b>Tidehold CAT1 Bot</b>",
-        "",
-        "This bot broadcasts CAT1/weather risk alerts and logs station reports.",
-        "",
-        `Your user id: <code>${user.id || "unknown"}</code>`,
-        `This chat id: <code>${chatId}</code>`,
-        forwardedChat
-          ? `Forwarded-from chat id: <code>${forwardedChat.id}</code> (${escapeHtml(forwardedChat.title || forwardedChat.username || "unnamed")})`
-          : "To find a private channel id, add this bot as channel admin, then forward one channel post here.",
-        "",
-        "Admin commands:",
-        "/cat1_on, /cat1_off, /pause_event, /resume_event, /status, /check_weather, /track_location, /broadcast"
-      ].join("\n"),
-      isAdmin(user.id) ? { reply_markup: adminKeyboard() } : {}
+      admin
+        ? [
+            "<b>OpsCatalyst Comms</b>",
+            "",
+            "Admin control panel is ready.",
+            "",
+            `Your user id: <code>${user.id || "unknown"}</code>`,
+            `This chat id: <code>${chatId}</code>`,
+            forwardedChat
+              ? `Forwarded-from chat id: <code>${forwardedChat.id}</code> (${escapeHtml(forwardedChat.title || forwardedChat.username || "unnamed")})`
+              : "",
+            "",
+            "Quick reply:",
+            "<code>/reply USER_ID message</code>"
+          ]
+            .filter((line) => line !== "")
+            .join("\n")
+        : [
+            "<b>OpsCatalyst Comms</b>",
+            "",
+            "Use this bot to contact the chief facilitator quickly.",
+            "Tap a category below, or type your message here.",
+            "",
+            "For urgent safety matters, use Safety/Medical."
+          ].join("\n"),
+      admin ? { reply_markup: adminKeyboard() } : { reply_markup: facilitatorKeyboard() }
     );
     return { ok: true, type: "help" };
   }
 
   if (!isAdmin(user.id)) {
-    await sendMessage(chatId, "This command is admin-only. Use the channel buttons for reports.");
-    return { ok: true, type: "not_admin" };
+    if (text === "/report" || text === "/comms") {
+      await sendMessage(chatId, "Choose a report type, or type your message here.", { reply_markup: facilitatorKeyboard() });
+      return { ok: true, type: "facilitator_menu" };
+    }
+
+    await forwardFacilitatorMessage(message);
+    return { ok: true, type: "facilitator_message" };
   }
 
   await handleAdminCommand(text, chatId);
@@ -229,6 +248,20 @@ async function handleAdminCommand(text, chatId) {
     return;
   }
 
+  if (command === "/reply") {
+    const [targetId, ...replyParts] = parts;
+    const replyText = replyParts.join(" ").trim();
+    if (!targetId || !replyText) {
+      await sendMessage(chatId, "Usage: /reply USER_ID Your message");
+      return;
+    }
+    await sendMessage(targetId, `<b>Chief Facilitator Reply</b>\n\n${escapeHtml(replyText)}`, {
+      reply_markup: facilitatorKeyboard()
+    });
+    await sendMessage(chatId, `Reply sent to <code>${escapeHtml(targetId)}</code>.`, { reply_markup: adminKeyboard() });
+    return;
+  }
+
   await sendMessage(chatId, "Unknown admin command. Try /status or /help.");
 }
 
@@ -266,6 +299,16 @@ async function handleCallback(callbackQuery) {
     return;
   }
 
+  if (data.startsWith("reply:")) {
+    await handleAdminReplyCallback(callbackQuery);
+    return;
+  }
+
+  if (data.startsWith("fac:")) {
+    await handleFacilitatorCallback(callbackQuery);
+    return;
+  }
+
   if (!data.startsWith("report:")) {
     await answerCallback(callbackQuery.id, "Unknown action.");
     return;
@@ -282,6 +325,78 @@ async function handleCallback(callbackQuery) {
       `Time: ${new Date().toLocaleString("en-SG", { timeZone: "Asia/Singapore" })}`
     ].join("\n")
   );
+}
+
+async function handleFacilitatorCallback(callbackQuery) {
+  const user = callbackQuery.from || {};
+  const action = (callbackQuery.data || "").slice("fac:".length);
+  const label = facilitatorReportLabel(action);
+  const actorName = formatUser(user) || "Unknown user";
+
+  await answerCallback(callbackQuery.id, `Sent: ${label}`);
+  await sendMessage(callbackQuery.message?.chat?.id || user.id, `Sent to chief facilitator: ${label}`, {
+    reply_markup: facilitatorKeyboard()
+  });
+
+  await notifyAdmins(
+    [
+      `<b>Facilitator Report</b>`,
+      "",
+      `<b>Type:</b> ${escapeHtml(label)}`,
+      `<b>From:</b> ${escapeHtml(actorName)}`,
+      `<b>User ID:</b> <code>${user.id || "unknown"}</code>`,
+      `<b>Time:</b> ${new Date().toLocaleString("en-SG", { timeZone: "Asia/Singapore" })}`,
+      "",
+      `Reply with: <code>/reply ${user.id || ""} message</code>`
+    ].join("\n"),
+    user.id
+  );
+}
+
+async function forwardFacilitatorMessage(message) {
+  const user = message.from || {};
+  const actorName = formatUser(user) || "Unknown user";
+  const text = message.text || message.caption || "[Non-text message received]";
+
+  await notifyAdmins(
+    [
+      `<b>Facilitator Message</b>`,
+      "",
+      `<b>From:</b> ${escapeHtml(actorName)}`,
+      `<b>User ID:</b> <code>${user.id || "unknown"}</code>`,
+      `<b>Chat ID:</b> <code>${message.chat?.id || "unknown"}</code>`,
+      `<b>Time:</b> ${new Date().toLocaleString("en-SG", { timeZone: "Asia/Singapore" })}`,
+      "",
+      `<b>Message</b>`,
+      escapeHtml(text),
+      "",
+      `Reply with: <code>/reply ${user.id || ""} message</code>`
+    ].join("\n"),
+    user.id
+  );
+
+  await sendMessage(message.chat.id, "Message sent to the chief facilitator.", { reply_markup: facilitatorKeyboard() });
+}
+
+async function handleAdminReplyCallback(callbackQuery) {
+  const user = callbackQuery.from || {};
+  if (!isAdmin(user.id)) {
+    await answerCallback(callbackQuery.id, "Admin-only action.", true);
+    return;
+  }
+
+  const [, action, targetId] = (callbackQuery.data || "").split(":");
+  const text = cannedReply(action);
+  if (!targetId || !text) {
+    await answerCallback(callbackQuery.id, "Unknown reply action.", true);
+    return;
+  }
+
+  await sendMessage(targetId, text, { reply_markup: facilitatorKeyboard() });
+  await answerCallback(callbackQuery.id, "Sent.");
+  await sendMessage(callbackQuery.message?.chat?.id || user.id, `Sent to <code>${escapeHtml(targetId)}</code>:\n${text}`, {
+    reply_markup: adminKeyboard()
+  });
 }
 
 async function handleAdminCallback(callbackQuery) {
@@ -401,9 +516,13 @@ async function broadcastCat1(reason, manual, window = buildCat1Window()) {
   await notifyAdmins(`Broadcast sent to channel.\n\n${message}`);
 }
 
-async function notifyAdmins(text) {
+async function notifyAdmins(text, sourceUserId = "") {
   if (!config.adminAlertChatId) return;
-  await sendMessage(config.adminAlertChatId, text);
+  await sendMessage(
+    config.adminAlertChatId,
+    text,
+    sourceUserId ? { reply_markup: adminResponseKeyboard(sourceUserId) } : {}
+  );
 }
 
 async function safeForecast() {
@@ -459,6 +578,28 @@ function reportLabel(action) {
     resolved: "Resolved"
   };
   return labels[action] || action;
+}
+
+function facilitatorReportLabel(action) {
+  const labels = {
+    need_support: "Need support",
+    safety_medical: "Safety/medical",
+    station_issue: "Station issue",
+    logistics: "Logistics",
+    weather_concern: "Weather concern",
+    resolved: "Resolved"
+  };
+  return labels[action] || action;
+}
+
+function cannedReply(action) {
+  const replies = {
+    ack: "<b>Chief Facilitator</b>\n\nAcknowledged. Stand by for instructions.",
+    details: "<b>Chief Facilitator</b>\n\nPlease send more details: location, issue, and what support you need.",
+    resolved: "<b>Chief Facilitator</b>\n\nMarked resolved. Thank you for the update.",
+    call: "<b>Chief Facilitator</b>\n\nPlease call or voice-message me when safe to do so."
+  };
+  return replies[action] || "";
 }
 
 function formatUser(user) {

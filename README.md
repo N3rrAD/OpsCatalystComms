@@ -1,9 +1,12 @@
-# Tidehold CAT1 Telegram Bot
+# OpsCatalyst Comms Telegram Bot
 
-Standalone backup bot for Tidehold event operations.
+Standalone Telegram comms bot for Tidehold/OCC event operations.
 
 It can:
 
+- act as a quick communication bridge between facilitators and the chief facilitator
+- forward facilitator DMs and issue-button reports to the admin alert chat
+- let the chief facilitator acknowledge, ask for details, mark resolved, or reply back
 - poll NEA/data.gov.sg weather data for lightning risk near the event area
 - broadcast CAT1 risk alerts to a Telegram channel
 - receive inline-button reports from channel members
@@ -28,7 +31,7 @@ npm start
 
 No npm packages are required.
 
-When anyone DMs `/start`, the bot replies with their Telegram user id and the current chat id. Put your own user id in `ADMIN_USER_IDS`, and put your private chat or admin group id in `ADMIN_ALERT_CHAT_ID`.
+When anyone DMs `/start`, admins see the admin control panel. Facilitators see a quick report menu and can also just type a message. Put your own user id in `ADMIN_USER_IDS`, and put your private chat or admin group id in `ADMIN_ALERT_CHAT_ID`.
 
 Keep `TELEGRAM_BOT_TOKEN` in `.env` only. If the token is ever pasted into chat or shared, rotate it in BotFather.
 
@@ -127,6 +130,7 @@ https://YOUR-VERCEL-DOMAIN.vercel.app/api/hourly-weather?secret=YOUR_CRON_SECRET
 Admin-only:
 
 ```text
+/reply USER_ID Your message here
 /cat1_on
 /cat1_off
 /pause_event
@@ -144,6 +148,40 @@ Admin-only:
 ```
 
 Admins also get an inline control panel after `/start` or `/help`, with buttons for activating CAT1, all-clear, pause/resume, weather check, status, and broadcasting the latest weather.
+
+## Facilitator Comms
+
+Facilitators DM the bot:
+
+```text
+/start
+```
+
+They can tap:
+
+```text
+Need Support
+Safety/Medical
+Station Issue
+Logistics
+Weather Concern
+Resolved
+```
+
+Or they can type any message. The bot forwards it to `ADMIN_ALERT_CHAT_ID` with their name, user id, timestamp, and quick admin response buttons:
+
+```text
+Acknowledge
+Need Details
+Mark Resolved
+Ask to Call
+```
+
+The chief facilitator can also reply manually:
+
+```text
+/reply USER_ID Message to send back
+```
 
 ## Location-Based Weather
 
