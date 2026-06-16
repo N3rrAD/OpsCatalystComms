@@ -133,28 +133,42 @@ export async function getHourlyWeatherSummary(options = {}) {
     ? summarizeTwentyFourHourForecast(twentyFourHourResult.value)
     : { summary: `24-hour forecast unavailable: ${twentyFourHourResult.reason.message}` };
 
+  const riskText = [
+    twoHour.condition,
+    ...(Array.isArray(twoHour.monitoredAreas) ? twoHour.monitoredAreas.map((area) => area.forecast) : []),
+    twentyFourHour.regionalForecast
+  ].join("\n");
+  const risk = hasWeatherRisk(riskText);
+  const riskLevel = getWeatherRiskLevel(riskText);
+
   return {
     updated: twoHour.updated || twentyFourHour.updated || "unknown",
     nearestArea: twoHour.nearestArea || "unknown",
     condition: twoHour.condition || "unknown",
+    monitoredAreas: twoHour.monitoredAreas || [],
     validPeriod: twoHour.validPeriod || "",
     temperature: twentyFourHour.temperature || "unknown",
     humidity: twentyFourHour.humidity || "unknown",
     wind: twentyFourHour.wind || "unknown",
     regionalForecast: twentyFourHour.regionalForecast || "",
-    risk: hasWeatherRisk(twoHour.condition, twentyFourHour.regionalForecast),
-    riskLevel: getWeatherRiskLevel(twoHour.condition, twentyFourHour.regionalForecast),
+    risk,
+    riskLevel,
     summary: buildWeatherSummary({
       location,
       twoHour,
       twentyFourHour,
-      risk: hasWeatherRisk(twoHour.condition, twentyFourHour.regionalForecast),
-      riskLevel: getWeatherRiskLevel(twoHour.condition, twentyFourHour.regionalForecast)
+      risk,
+      riskLevel
     })
   };
 }
 
 function buildWeatherSummary({ location, twoHour, twentyFourHour, risk, riskLevel }) {
+  const monitoredAreas = Array.isArray(twoHour.monitoredAreas) ? twoHour.monitoredAreas : [];
+  const monitoredText = monitoredAreas
+    .map((area) => `${area.area}: ${area.forecast} (${area.distanceKm.toFixed(1)} km)`)
+    .join("\n");
+
   return [
       risk ? `<b>WEATHER RISK ALERT</b>` : `<b>OCC WEATHER CHECK</b>`,
       `<code>${formatSingaporeDateTime(new Date())} SGT</code>`,
@@ -162,9 +176,12 @@ function buildWeatherSummary({ location, twoHour, twentyFourHour, risk, riskLeve
       ...(risk ? [`<b>Status</b>\n${escapeHtml(riskLevel)}`, ""] : []),
       `<b>Location</b>`,
       `${escapeHtml(location.label)}`,
+      location.bounds
+        ? `Watch area: ${formatBounds(location.bounds)}`
+        : "",
       "",
-      `<b>Nearest Forecast Area</b>`,
-      `${escapeHtml(twoHour.nearestArea || "Unknown")}`,
+      monitoredAreas.length > 1 ? `<b>Monitored Forecast Areas</b>` : `<b>Nearest Forecast Area</b>`,
+      monitoredAreas.length > 1 ? escapeHtml(monitoredText) : `${escapeHtml(twoHour.nearestArea || "Unknown")}`,
       "",
       `<b>Current Outlook</b>`,
       `${escapeHtml(twoHour.condition || "Unknown")}`,
@@ -269,9 +286,7 @@ function summarizeTwoHourForecast(payload, location) {
       return {
         area: forecast.area,
         forecast: forecast.forecast || "",
-        distanceKm: Number.isFinite(lat) && Number.isFinite(lon)
-          ? haversineKm(location.lat, location.lon, lat, lon)
-          : Number.POSITIVE_INFINITY
+        distanceKm: forecastAreaDistanceKm(location, lat, lon)
       };
     })
     .filter((area) => Number.isFinite(area.distanceKm))
@@ -280,19 +295,22 @@ function summarizeTwoHourForecast(payload, location) {
   const exactArea = location.area
     ? forecastAreas.find((area) => area.area.toLowerCase() === location.area.toLowerCase())
     : null;
-  const nearest = exactArea || forecastAreas[0];
+  const monitoredAreas = pickMonitoredForecastAreas(forecastAreas, location, exactArea);
+  const nearest = exactArea || monitoredAreas[0] || forecastAreas[0];
 
   return {
     updated: item?.update_timestamp || item?.timestamp || "",
     nearestArea: nearest ? exactArea ? `${nearest.area} (selected area)` : `${nearest.area} (${nearest.distanceKm.toFixed(1)} km)` : "",
     condition: nearest?.forecast || "",
+    monitoredAreas,
     validPeriod: item?.valid_period?.text || ""
   };
 }
 
 function normalizeLocationOptions(options) {
-  const lat = Number(options.lat ?? config.eventLat);
-  const lon = Number(options.lon ?? config.eventLon);
+  const bounds = normalizeBounds(options.bounds || config.eventBounds);
+  const lat = Number(options.lat ?? bounds?.centerLat ?? config.eventLat);
+  const lon = Number(options.lon ?? bounds?.centerLon ?? config.eventLon);
   const area = typeof options.area === "string" ? options.area.trim() : "";
   const label = typeof options.label === "string" && options.label.trim()
     ? options.label.trim()
@@ -301,9 +319,55 @@ function normalizeLocationOptions(options) {
   return {
     lat: Number.isFinite(lat) ? lat : config.eventLat,
     lon: Number.isFinite(lon) ? lon : config.eventLon,
+    bounds,
+    radiusKm: Number.isFinite(Number(options.radiusKm)) ? Number(options.radiusKm) : config.eventWeatherRadiusKm,
     area,
     label
   };
+}
+
+function normalizeBounds(bounds) {
+  if (!bounds || typeof bounds !== "object") return null;
+
+  const south = Number(bounds.south);
+  const west = Number(bounds.west);
+  const north = Number(bounds.north);
+  const east = Number(bounds.east);
+  if (![south, west, north, east].every(Number.isFinite)) return null;
+
+  return {
+    south: Math.min(south, north),
+    west: Math.min(west, east),
+    north: Math.max(south, north),
+    east: Math.max(west, east),
+    centerLat: Number.isFinite(Number(bounds.centerLat))
+      ? Number(bounds.centerLat)
+      : (south + north) / 2,
+    centerLon: Number.isFinite(Number(bounds.centerLon))
+      ? Number(bounds.centerLon)
+      : (west + east) / 2
+  };
+}
+
+function pickMonitoredForecastAreas(forecastAreas, location, exactArea) {
+  if (exactArea) return [exactArea];
+  if (!location.bounds) return forecastAreas.slice(0, 1);
+
+  const radiusKm = Math.max(0, Number(location.radiusKm) || 0);
+  const withinWatchArea = forecastAreas.filter((area) => area.distanceKm <= radiusKm);
+  return (withinWatchArea.length ? withinWatchArea : forecastAreas.slice(0, 3)).slice(0, 5);
+}
+
+function forecastAreaDistanceKm(location, lat, lon) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return Number.POSITIVE_INFINITY;
+  if (location.bounds) return distanceToBoundsKm(lat, lon, location.bounds);
+  return haversineKm(location.lat, location.lon, lat, lon);
+}
+
+function distanceToBoundsKm(lat, lon, bounds) {
+  const nearestLat = Math.min(Math.max(lat, bounds.south), bounds.north);
+  const nearestLon = Math.min(Math.max(lon, bounds.west), bounds.east);
+  return haversineKm(lat, lon, nearestLat, nearestLon);
 }
 
 function summarizeTwentyFourHourForecast(payload) {
@@ -342,8 +406,8 @@ function compactForecast(value) {
     .replaceAll("Heavy Thundery Showers", "Heavy thundery showers");
 }
 
-function hasWeatherRisk(condition = "", regionalForecast = "") {
-  const text = `${condition}\n${regionalForecast}`.toLowerCase();
+function hasWeatherRisk(...values) {
+  const text = values.join("\n").toLowerCase();
   return (
     text.includes("thundery") ||
     text.includes("thunder") ||
@@ -353,8 +417,8 @@ function hasWeatherRisk(condition = "", regionalForecast = "") {
   );
 }
 
-function getWeatherRiskLevel(condition = "", regionalForecast = "") {
-  const text = `${condition}\n${regionalForecast}`.toLowerCase();
+function getWeatherRiskLevel(...values) {
+  const text = values.join("\n").toLowerCase();
   if (text.includes("heavy thundery") || text.includes("gusty winds")) {
     return "RED - Heavy thundery showers / gusty winds forecast";
   }
@@ -381,6 +445,10 @@ function formatSingaporeDateTime(date) {
     minute: "2-digit",
     hour12: false
   }).format(date);
+}
+
+function formatBounds(bounds) {
+  return `${bounds.south.toFixed(6)}, ${bounds.west.toFixed(6)} to ${bounds.north.toFixed(6)}, ${bounds.east.toFixed(6)}`;
 }
 
 function escapeHtml(value) {

@@ -3,13 +3,17 @@ import path from "node:path";
 
 loadDotEnv();
 
+const defaultEventBounds = "1.2990444444,103.8728305556;1.3059416667,103.8748305556";
+
 export const config = {
   botToken: required("TELEGRAM_BOT_TOKEN"),
   channelId: required("TELEGRAM_CHANNEL_ID"),
   adminAlertChatId: process.env.ADMIN_ALERT_CHAT_ID || "",
   adminUserIds: parseList(process.env.ADMIN_USER_IDS).map((id) => Number(id)).filter(Boolean),
-  eventLat: numberEnv("EVENT_LAT", 1.3521),
-  eventLon: numberEnv("EVENT_LON", 103.8198),
+  eventLat: numberEnv("EVENT_LAT", 1.3024930556),
+  eventLon: numberEnv("EVENT_LON", 103.8738305556),
+  eventBounds: parseBounds(process.env.EVENT_BOUNDS || defaultEventBounds),
+  eventWeatherRadiusKm: numberEnv("EVENT_WEATHER_RADIUS_KM", 1),
   eventLocationLabel: process.env.EVENT_LOCATION_LABEL || "Event site",
   lightningRadiusKm: numberEnv("LIGHTNING_RADIUS_KM", 12),
   weatherPollSeconds: Math.max(30, numberEnv("WEATHER_POLL_SECONDS", 120)),
@@ -48,6 +52,27 @@ function parseList(value = "") {
 function numberEnv(key, fallback) {
   const value = Number(process.env[key]);
   return Number.isFinite(value) ? value : fallback;
+}
+
+function parseBounds(value = "") {
+  const points = value
+    .split(";")
+    .map((point) => point.split(",").map((part) => Number(part.trim())))
+    .filter(([lat, lon]) => Number.isFinite(lat) && Number.isFinite(lon));
+
+  if (points.length < 2) return null;
+
+  const lats = points.map(([lat]) => lat);
+  const lons = points.map(([, lon]) => lon);
+
+  return {
+    south: Math.min(...lats),
+    west: Math.min(...lons),
+    north: Math.max(...lats),
+    east: Math.max(...lons),
+    centerLat: (Math.min(...lats) + Math.max(...lats)) / 2,
+    centerLon: (Math.min(...lons) + Math.max(...lons)) / 2
+  };
 }
 
 function boolEnv(key, fallback) {
