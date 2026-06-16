@@ -152,6 +152,7 @@ export function adminKeyboard() {
         { text: "Point System", callback_data: "admin:point_system" }
       ],
       [
+        { text: "Summary", callback_data: "admin:summary" },
         { text: "Check Weather", callback_data: "admin:check_weather" }
       ]
     ]
@@ -174,14 +175,13 @@ export function messagePriorityKeyboard() {
 
 export function gameOptionsKeyboard(games) {
   const rows = games.map((game) => [{ text: game.name, callback_data: `points:game:${game.id}` }]);
-  rows.push([{ text: "Summary", callback_data: "points:summary" }]);
   rows.push([{ text: "Back", callback_data: "nav:admin" }]);
   return { inline_keyboard: rows };
 }
 
 export function summaryKeyboard() {
   return {
-    inline_keyboard: [[{ text: "Back", callback_data: "admin:point_system" }]]
+    inline_keyboard: [[{ text: "Back", callback_data: "nav:admin" }]]
   };
 }
 

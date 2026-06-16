@@ -445,6 +445,7 @@ async function handleMessagePriorityCallback(callbackQuery) {
       urgent ? "<b>Urgent Message</b>" : "<b>Normal Message</b>",
       "",
       "Reply to this message with what you need to tell the chief facilitator.",
+      "It will be sent directly to the admin alert chat.",
       "",
       `[MSG_PRIORITY:${urgent ? "urgent" : "normal"}]`
     ].join("\n"),
@@ -490,13 +491,6 @@ async function handlePointCallback(callbackQuery) {
   const game = gameId ? getGame(gameId) : null;
 
   await answerCallback(callbackQuery.id, "Selected.");
-
-  if (action === "summary") {
-    await sendMessage(chatId, buildCaptureSummaryMessage(), {
-      reply_markup: summaryKeyboard()
-    });
-    return;
-  }
 
   if (action === "game" && game) {
     await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n\nChoose an action.`, {
@@ -686,6 +680,13 @@ async function handleAdminCallback(callbackQuery) {
   if (action === "point_system") {
     await sendMessage(chatId, "<b>Point System</b>\n\nSelect a game or inject.", {
       reply_markup: gameOptionsKeyboard(GAME_OPTIONS)
+    });
+    return;
+  }
+
+  if (action === "summary") {
+    await sendMessage(chatId, buildCaptureSummaryMessage(), {
+      reply_markup: summaryKeyboard()
     });
     return;
   }
