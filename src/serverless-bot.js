@@ -1,15 +1,30 @@
 import { config, isAdmin } from "./config.js";
 import { buildCat1Window, formatCat1Window } from "./cat1-window.js";
+import {
+  GAME_OPTIONS,
+  TEAM_OPTIONS,
+  formatSingaporeTimestamp,
+  getGame,
+  getTeam,
+  normalizePbTime,
+  normalizePoints
+} from "./point-system.js";
 import { checkForecastContext, checkLightningRisk, getHourlyWeatherSummary } from "./weather.js";
 import {
   adminKeyboard,
   adminResponseKeyboard,
   answerCallback,
   facilitatorKeyboard,
+  forceReplyKeyboard,
+  gameActionKeyboard,
+  gameOptionsKeyboard,
   locationRequestKeyboard,
+  messagePriorityKeyboard,
   opsKeyboard,
+  pbTypeKeyboard,
   safetyKeyboard,
-  sendMessage
+  sendMessage,
+  teamCaptureKeyboard
 } from "./telegram.js";
 
 export async function handleTelegramUpdate(update) {
@@ -40,6 +55,13 @@ export async function handleTelegramUpdate(update) {
   const chatId = message.chat.id;
   const user = message.from || {};
 
+  if (message.reply_to_message?.text) {
+    const handledReply = await handlePromptReply(message);
+    if (handledReply) {
+      return handledReply;
+    }
+  }
+
   if (text === "/start" || text === "/help") {
     const forwardedChat = getForwardedChat(message);
     const admin = isAdmin(user.id);
@@ -50,6 +72,7 @@ export async function handleTelegramUpdate(update) {
             "<b>OpsCatalyst Comms</b>",
             "",
             "Admin control panel is ready.",
+            "Use Message for facilitator comms, Point System for game updates, and Check Weather for weather context.",
             "",
             `Your user id: <code>${user.id || "unknown"}</code>`,
             `This chat id: <code>${chatId}</code>`,
@@ -66,9 +89,9 @@ export async function handleTelegramUpdate(update) {
             "<b>OpsCatalyst Comms</b>",
             "",
             "Use this bot to contact the chief facilitator quickly.",
-            "Tap a category below, or type your message here.",
+            "Tap Urgent/Normal, or type your message here.",
             "",
-            "For urgent safety matters, use Safety/Medical."
+            "For urgent safety matters, choose Urgent Message or Safety/Medical."
           ].join("\n"),
       admin ? { reply_markup: adminKeyboard() } : { reply_markup: facilitatorKeyboard() }
     );
@@ -304,6 +327,16 @@ async function handleCallback(callbackQuery) {
     return;
   }
 
+  if (data.startsWith("facmsg:")) {
+    await handleMessagePriorityCallback(callbackQuery);
+    return;
+  }
+
+  if (data.startsWith("points:")) {
+    await handlePointCallback(callbackQuery);
+    return;
+  }
+
   if (data.startsWith("fac:")) {
     await handleFacilitatorCallback(callbackQuery);
     return;
@@ -325,6 +358,200 @@ async function handleCallback(callbackQuery) {
       `Time: ${new Date().toLocaleString("en-SG", { timeZone: "Asia/Singapore" })}`
     ].join("\n")
   );
+}
+
+async function handlePromptReply(message) {
+  const prompt = message.reply_to_message?.text || "";
+  const text = message.text || "";
+  const user = message.from || {};
+  const chatId = message.chat.id;
+
+  const priorityMatch = prompt.match(/\[MSG_PRIORITY:(urgent|normal)\]/);
+  if (priorityMatch) {
+    await forwardPriorityMessage(message, priorityMatch[1]);
+    return { ok: true, type: "priority_message" };
+  }
+
+  const pbMatch = prompt.match(/\[PB_INPUT:([^:]+):(points|time|other)\]/);
+  if (pbMatch) {
+    const [, gameId, pbType] = pbMatch;
+    const game = getGame(gameId);
+    if (!game) {
+      await sendMessage(chatId, "I could not match that game. Please use Point System again.", {
+        reply_markup: adminKeyboard()
+      });
+      return { ok: true, type: "pb_input_unknown_game" };
+    }
+
+    let formattedValue = text.trim();
+    if (pbType === "points") {
+      formattedValue = normalizePoints(text);
+      if (!formattedValue) {
+        await sendMessage(chatId, "Please reply with points as a number, for example: 120", {
+          reply_markup: forceReplyKeyboard("Example: 120")
+        });
+        return { ok: true, type: "pb_points_invalid" };
+      }
+      formattedValue = `${formattedValue} points`;
+    }
+
+    if (pbType === "time") {
+      formattedValue = normalizePbTime(text);
+      if (!formattedValue) {
+        await sendMessage(chatId, "Please reply with time as MM:SS, HH:MM:SS, or seconds. Example: 02:35", {
+          reply_markup: forceReplyKeyboard("Example: 02:35")
+        });
+        return { ok: true, type: "pb_time_invalid" };
+      }
+    }
+
+    await notifyAdmins(
+      [
+        "<b>PB Update</b>",
+        "",
+        `<b>Game:</b> ${escapeHtml(game.name)}`,
+        `<b>Type:</b> ${escapeHtml(pbTypeLabel(pbType))}`,
+        `<b>PB:</b> ${escapeHtml(formattedValue)}`,
+        `<b>Submitted by:</b> ${escapeHtml(formatUser(user) || "Unknown user")}`,
+        `<b>Time:</b> ${formatSingaporeTimestamp()}`
+      ].join("\n"),
+      user.id
+    );
+    await sendMessage(chatId, "PB update sent.", { reply_markup: adminKeyboard() });
+    return { ok: true, type: "pb_input" };
+  }
+
+  return null;
+}
+
+async function handleMessagePriorityCallback(callbackQuery) {
+  const user = callbackQuery.from || {};
+  const priority = (callbackQuery.data || "").slice("facmsg:".length);
+  const chatId = callbackQuery.message?.chat?.id || user.id;
+  const urgent = priority === "urgent";
+
+  await answerCallback(callbackQuery.id, urgent ? "Urgent message selected." : "Normal message selected.");
+  await sendMessage(
+    chatId,
+    [
+      urgent ? "<b>Urgent Message</b>" : "<b>Normal Message</b>",
+      "",
+      "Reply to this message with what you need to tell the chief facilitator.",
+      "",
+      `[MSG_PRIORITY:${urgent ? "urgent" : "normal"}]`
+    ].join("\n"),
+    { reply_markup: forceReplyKeyboard("Type your message") }
+  );
+}
+
+async function forwardPriorityMessage(message, priority) {
+  const user = message.from || {};
+  const actorName = formatUser(user) || "Unknown user";
+  const urgent = priority === "urgent";
+
+  await notifyAdmins(
+    [
+      urgent ? "<b>PRIORITY ALERT</b>" : "<b>Normal Message</b>",
+      "",
+      `<b>From:</b> ${escapeHtml(actorName)}`,
+      `<b>User ID:</b> <code>${user.id || "unknown"}</code>`,
+      `<b>Time:</b> ${formatSingaporeTimestamp()}`,
+      "",
+      `<b>Message</b>`,
+      escapeHtml(message.text || "[No text]"),
+      "",
+      `Reply with: <code>/reply ${user.id || ""} message</code>`
+    ].join("\n"),
+    user.id
+  );
+
+  await sendMessage(
+    message.chat.id,
+    urgent ? "Urgent message sent as a priority alert." : "Normal message sent.",
+    { reply_markup: facilitatorKeyboard() }
+  );
+}
+
+async function handlePointCallback(callbackQuery) {
+  const data = callbackQuery.data || "";
+  const user = callbackQuery.from || {};
+  const chatId = callbackQuery.message?.chat?.id || user.id;
+  const parts = data.split(":");
+  const action = parts[1];
+  const gameId = parts[2];
+  const game = gameId ? getGame(gameId) : null;
+
+  await answerCallback(callbackQuery.id, "Selected.");
+
+  if (action === "game" && game) {
+    await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n\nChoose an action.`, {
+      reply_markup: gameActionKeyboard(game.id)
+    });
+    return;
+  }
+
+  if (action === "pb" && game) {
+    await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n\nSelect PB type.`, {
+      reply_markup: pbTypeKeyboard(game.id)
+    });
+    return;
+  }
+
+  if (["pb_points", "pb_time", "pb_other"].includes(action) && game) {
+    const pbType = action.replace("pb_", "");
+    const placeholder = pbType === "points" ? "Example: 120" : pbType === "time" ? "Example: 02:35" : "Type PB details";
+    await sendMessage(
+      chatId,
+      [
+        `<b>${escapeHtml(game.name)}</b>`,
+        "",
+        `Reply to this message with the ${escapeHtml(pbTypeLabel(pbType))} PB.`,
+        pbType === "time" ? "Accepted time formats: MM:SS, HH:MM:SS, or seconds." : "",
+        "",
+        `[PB_INPUT:${game.id}:${pbType}]`
+      ]
+        .filter((line) => line !== "")
+        .join("\n"),
+      { reply_markup: forceReplyKeyboard(placeholder) }
+    );
+    return;
+  }
+
+  if (action === "capture" && game) {
+    await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n\nWho captured it?`, {
+      reply_markup: teamCaptureKeyboard(game.id, TEAM_OPTIONS)
+    });
+    return;
+  }
+
+  if (action === "team" && game) {
+    const team = getTeam(parts[3]);
+    if (!team) {
+      await sendMessage(chatId, "Unknown team selected. Please try again.", { reply_markup: gameActionKeyboard(game.id) });
+      return;
+    }
+
+    const capturedAt = formatSingaporeTimestamp();
+    await notifyAdmins(
+      [
+        "<b>Game Capture Update</b>",
+        "",
+        `<b>Game:</b> ${escapeHtml(game.name)}`,
+        `<b>Captured by:</b> ${escapeHtml(team)}`,
+        `<b>Captured at:</b> ${capturedAt}`,
+        `<b>Submitted by:</b> ${escapeHtml(formatUser(user) || "Unknown user")}`
+      ].join("\n"),
+      user.id
+    );
+    await sendMessage(chatId, `${team} captured ${game.name} at ${capturedAt}.`, {
+      reply_markup: gameActionKeyboard(game.id)
+    });
+    return;
+  }
+
+  await sendMessage(chatId, "I could not process that point-system action. Please try again.", {
+    reply_markup: gameOptionsKeyboard(GAME_OPTIONS)
+  });
 }
 
 async function handleFacilitatorCallback(callbackQuery) {
@@ -410,6 +637,20 @@ async function handleAdminCallback(callbackQuery) {
   }
 
   await answerCallback(callbackQuery.id, "Working...");
+
+  if (action === "message_menu") {
+    await sendMessage(chatId, "<b>Message</b>\n\nChoose message priority.", {
+      reply_markup: messagePriorityKeyboard()
+    });
+    return;
+  }
+
+  if (action === "point_system") {
+    await sendMessage(chatId, "<b>Point System</b>\n\nSelect a game or inject.", {
+      reply_markup: gameOptionsKeyboard(GAME_OPTIONS)
+    });
+    return;
+  }
 
   if (action === "cat1_on") {
     const window = buildCat1Window();
@@ -590,6 +831,15 @@ function facilitatorReportLabel(action) {
     resolved: "Resolved"
   };
   return labels[action] || action;
+}
+
+function pbTypeLabel(type) {
+  const labels = {
+    points: "Points",
+    time: "Time",
+    other: "Other"
+  };
+  return labels[type] || type;
 }
 
 function cannedReply(action) {

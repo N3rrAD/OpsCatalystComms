@@ -110,6 +110,10 @@ export function facilitatorKeyboard() {
   return {
     inline_keyboard: [
       [
+        { text: "Urgent Message", callback_data: "facmsg:urgent" },
+        { text: "Normal Message", callback_data: "facmsg:normal" }
+      ],
+      [
         { text: "Need Support", callback_data: "fac:need_support" },
         { text: "Safety/Medical", callback_data: "fac:safety_medical" }
       ],
@@ -144,21 +148,72 @@ export function adminKeyboard() {
   return {
     inline_keyboard: [
       [
-        { text: "Activate CAT1", callback_data: "admin:cat1_on" },
-        { text: "All Clear", callback_data: "admin:cat1_off" }
+        { text: "Message", callback_data: "admin:message_menu" },
+        { text: "Point System", callback_data: "admin:point_system" }
       ],
       [
-        { text: "Pause Event", callback_data: "admin:pause_event" },
-        { text: "Resume Event", callback_data: "admin:resume_event" }
-      ],
-      [
-        { text: "Check Weather", callback_data: "admin:check_weather" },
-        { text: "Status", callback_data: "admin:status" }
-      ],
-      [
-        { text: "Broadcast Weather", callback_data: "admin:broadcast_weather" }
+        { text: "Check Weather", callback_data: "admin:check_weather" }
       ]
     ]
+  };
+}
+
+export function messagePriorityKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        { text: "Urgent", callback_data: "facmsg:urgent" },
+        { text: "Normal", callback_data: "facmsg:normal" }
+      ]
+    ]
+  };
+}
+
+export function gameOptionsKeyboard(games) {
+  const rows = games.map((game) => [{ text: game.name, callback_data: `points:game:${game.id}` }]);
+  return { inline_keyboard: rows };
+}
+
+export function gameActionKeyboard(gameId) {
+  return {
+    inline_keyboard: [
+      [
+        { text: "PB", callback_data: `points:pb:${gameId}` },
+        { text: "Who captured it", callback_data: `points:capture:${gameId}` }
+      ],
+      [{ text: "Back to Games", callback_data: "admin:point_system" }]
+    ]
+  };
+}
+
+export function pbTypeKeyboard(gameId) {
+  return {
+    inline_keyboard: [
+      [
+        { text: "Points", callback_data: `points:pb_points:${gameId}` },
+        { text: "Time", callback_data: `points:pb_time:${gameId}` }
+      ],
+      [
+        { text: "Other", callback_data: `points:pb_other:${gameId}` }
+      ],
+      [{ text: "Back", callback_data: `points:game:${gameId}` }]
+    ]
+  };
+}
+
+export function teamCaptureKeyboard(gameId, teams) {
+  const rows = teams.map((team, index) => [
+    { text: team, callback_data: `points:team:${gameId}:${index + 1}` }
+  ]);
+  rows.push([{ text: "Back", callback_data: `points:game:${gameId}` }]);
+  return { inline_keyboard: rows };
+}
+
+export function forceReplyKeyboard(placeholder = "Type your response") {
+  return {
+    force_reply: true,
+    input_field_placeholder: placeholder,
+    selective: true
   };
 }
 

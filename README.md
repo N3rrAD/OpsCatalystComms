@@ -147,7 +147,44 @@ Admin-only:
 /export_log
 ```
 
-Admins also get an inline control panel after `/start` or `/help`, with buttons for activating CAT1, all-clear, pause/resume, weather check, status, and broadcasting the latest weather.
+Admins also get an inline control panel after `/start` or `/help`.
+
+The primary admin panel now shows:
+
+```text
+Message
+Point System
+Check Weather
+```
+
+Message opens:
+
+```text
+Urgent
+Normal
+```
+
+Urgent messages are forwarded as priority alerts to the chief facilitator. Normal messages are forwarded as regular messages.
+
+Point System opens:
+
+```text
+Game 1: Triple P
+Game 2: Sea State 5
+Game 3: Bridgewatch Under Pressure
+Game 4: Full Salvo
+Game 5: Cargo Capture
+Game 6: Silent Convoy
+Game 7: Minefield
+Game 8: Marker Maze
+Game 9: Cannonball
+Game 10: Dead Reckoning
+Game 11: Shuttle Siege
+Inject 1: Underway
+Inject 2: Knot Showdown
+```
+
+Each game lets the user choose PB or who captured it. PB accepts Points, Time, or Other. Time PBs are normalized to `MM:SS` or `HH:MM:SS` where possible. Capture updates show the team and Singapore timestamp.
 
 ## Facilitator Comms
 
