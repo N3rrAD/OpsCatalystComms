@@ -182,9 +182,12 @@ Game 10: Dead Reckoning
 Game 11: Shuttle Siege
 Inject 1: Underway
 Inject 2: Knot Showdown
+Summary
 ```
 
 Each game lets the user choose PB or who captured it. PB accepts Points, Time, or Other. Time PBs are normalized to `MM:SS` or `HH:MM:SS` where possible. Capture updates show the team and Singapore timestamp.
+
+Summary shows every game and the latest team capture/time. If a game has not been captured, it shows "No one has captured yet." Current summary storage is in-memory on the running Vercel function instance; add persistent storage if this must survive cold starts or redeploys.
 
 ## Facilitator Comms
 

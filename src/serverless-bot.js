@@ -24,8 +24,11 @@ import {
   pbTypeKeyboard,
   safetyKeyboard,
   sendMessage,
+  summaryKeyboard,
   teamCaptureKeyboard
 } from "./telegram.js";
+
+const captureSummary = new Map();
 
 export async function handleTelegramUpdate(update) {
   if (update.callback_query) {
@@ -322,6 +325,11 @@ async function handleCallback(callbackQuery) {
     return;
   }
 
+  if (data.startsWith("nav:")) {
+    await handleNavigationCallback(callbackQuery);
+    return;
+  }
+
   if (data.startsWith("reply:")) {
     await handleAdminReplyCallback(callbackQuery);
     return;
@@ -483,6 +491,13 @@ async function handlePointCallback(callbackQuery) {
 
   await answerCallback(callbackQuery.id, "Selected.");
 
+  if (action === "summary") {
+    await sendMessage(chatId, buildCaptureSummaryMessage(), {
+      reply_markup: summaryKeyboard()
+    });
+    return;
+  }
+
   if (action === "game" && game) {
     await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n\nChoose an action.`, {
       reply_markup: gameActionKeyboard(game.id)
@@ -532,6 +547,12 @@ async function handlePointCallback(callbackQuery) {
     }
 
     const capturedAt = formatSingaporeTimestamp();
+    captureSummary.set(game.id, {
+      team,
+      capturedAt,
+      submittedBy: formatUser(user) || "Unknown user"
+    });
+
     await notifyAdmins(
       [
         "<b>Game Capture Update</b>",
@@ -552,6 +573,23 @@ async function handlePointCallback(callbackQuery) {
   await sendMessage(chatId, "I could not process that point-system action. Please try again.", {
     reply_markup: gameOptionsKeyboard(GAME_OPTIONS)
   });
+}
+
+async function handleNavigationCallback(callbackQuery) {
+  const user = callbackQuery.from || {};
+  const destination = (callbackQuery.data || "").slice("nav:".length);
+  const chatId = callbackQuery.message?.chat?.id || user.id;
+
+  await answerCallback(callbackQuery.id, "Back.");
+
+  if (destination === "admin") {
+    await sendMessage(chatId, "<b>OpsCatalyst Comms</b>\n\nAdmin control panel is ready.", {
+      reply_markup: adminKeyboard()
+    });
+    return;
+  }
+
+  await sendMessage(chatId, "Unknown navigation action.", { reply_markup: adminKeyboard() });
 }
 
 async function handleFacilitatorCallback(callbackQuery) {
@@ -840,6 +878,27 @@ function pbTypeLabel(type) {
     other: "Other"
   };
   return labels[type] || type;
+}
+
+function buildCaptureSummaryMessage() {
+  const lines = [
+    "<b>Capture Summary</b>",
+    "",
+    ...GAME_OPTIONS.map((game) => {
+      const capture = captureSummary.get(game.id);
+      if (!capture) {
+        return `<b>${escapeHtml(game.name)}</b>\nNo one has captured yet.`;
+      }
+
+      return [
+        `<b>${escapeHtml(game.name)}</b>`,
+        `Latest capture: ${escapeHtml(capture.team)}`,
+        `Captured at: ${escapeHtml(capture.capturedAt)}`
+      ].join("\n");
+    })
+  ];
+
+  return lines.join("\n\n");
 }
 
 function cannedReply(action) {
