@@ -192,6 +192,8 @@ The main Summary button shows every game and the latest team capture/time. If a 
 
 Weather broadcasts combine scheduled updates and risk mode. A normal update is sent as `OCC WEATHER CHECK`; if thundery/heavy weather appears in the forecast, the same scheduled/broadcast route sends `WEATHER RISK ALERT` and also notifies the admin alert chat.
 
+Weather location is controlled by `EVENT_LAT`, `EVENT_LON`, and `EVENT_LOCATION_LABEL`. The bot shows the nearest NEA 2-hour forecast area to those coordinates, so seeing "Bishan" means Bishan is the closest NEA forecast area to the current configured event location.
+
 ## Facilitator Comms
 
 Facilitators DM the bot:

@@ -202,23 +202,8 @@ async function handleAdminCommand(text, chatId) {
   }
 
   if (command === "/check_weather") {
-    const lightning = await checkLightningRisk().catch((error) => ({
-      summary: `Lightning check failed: ${error.message}`,
-      risk: false
-    }));
-    const forecast = await safeForecast();
-    await sendMessage(
-      chatId,
-      [
-        "<b>Weather Check</b>",
-        "",
-        `Lightning risk: ${lightning.risk ? "YES" : "NO"}`,
-        escapeHtml(lightning.summary),
-        "",
-        "<b>Forecast context</b>",
-        escapeHtml(forecast)
-      ].join("\n")
-    );
+    const weather = await getHourlyWeatherSummary();
+    await sendMessage(chatId, weather.summary, { reply_markup: adminKeyboard() });
     return;
   }
 
@@ -746,24 +731,8 @@ async function handleAdminCallback(callbackQuery) {
   }
 
   if (action === "check_weather") {
-    const lightning = await checkLightningRisk().catch((error) => ({
-      summary: `Lightning check failed: ${error.message}`,
-      risk: false
-    }));
-    const forecast = await safeForecast();
-    await sendMessage(
-      chatId,
-      [
-        "<b>Weather Check</b>",
-        "",
-        `Lightning risk: ${lightning.risk ? "YES" : "NO"}`,
-        escapeHtml(lightning.summary),
-        "",
-        "<b>Forecast context</b>",
-        escapeHtml(forecast)
-      ].join("\n"),
-      { reply_markup: adminKeyboard() }
-    );
+    const weather = await getHourlyWeatherSummary();
+    await sendMessage(chatId, weather.summary, { reply_markup: adminKeyboard() });
     return;
   }
 
