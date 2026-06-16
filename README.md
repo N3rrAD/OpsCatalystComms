@@ -156,6 +156,7 @@ Message
 Point System
 Summary
 Check Weather
+Broadcast Weather
 ```
 
 Message opens:
@@ -188,6 +189,8 @@ Inject 2: Knot Showdown
 Each game lets the user choose PB or who captured it. PB accepts Points, Time, or Other. Time PBs are normalized to `MM:SS` or `HH:MM:SS` where possible. Capture updates show the team and Singapore timestamp.
 
 The main Summary button shows every game and the latest team capture/time. If a game has not been captured, it shows "No one has captured yet." Current summary storage is in-memory on the running Vercel function instance; add persistent storage if this must survive cold starts or redeploys.
+
+Weather broadcasts combine scheduled updates and risk mode. A normal update is sent as `OCC WEATHER CHECK`; if thundery/heavy weather appears in the forecast, the same scheduled/broadcast route sends `WEATHER RISK ALERT` and also notifies the admin alert chat.
 
 ## Facilitator Comms
 

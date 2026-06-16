@@ -136,9 +136,20 @@ export async function runCronWeatherCheck() {
 export async function runHourlyWeatherBroadcast(location = {}) {
   const weather = await getHourlyWeatherSummary(location);
   await sendMessage(config.channelId, weather.summary);
+  if (weather.risk) {
+    await notifyAdmins(
+      [
+        "<b>Weather Risk Detected</b>",
+        "",
+        weather.summary
+      ].join("\n")
+    );
+  }
   return {
     ok: true,
     broadcasted: true,
+    risk: weather.risk,
+    riskLevel: weather.riskLevel,
     summary: weather.summary
   };
 }

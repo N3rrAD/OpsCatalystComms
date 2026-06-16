@@ -154,6 +154,9 @@ export function adminKeyboard() {
       [
         { text: "Summary", callback_data: "admin:summary" },
         { text: "Check Weather", callback_data: "admin:check_weather" }
+      ],
+      [
+        { text: "Broadcast Weather", callback_data: "admin:broadcast_weather" }
       ]
     ]
   };

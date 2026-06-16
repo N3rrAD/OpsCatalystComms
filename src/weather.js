@@ -142,10 +142,24 @@ export async function getHourlyWeatherSummary(options = {}) {
     humidity: twentyFourHour.humidity || "unknown",
     wind: twentyFourHour.wind || "unknown",
     regionalForecast: twentyFourHour.regionalForecast || "",
-    summary: [
-      `<b>OCC WEATHER CHECK</b>`,
+    risk: hasWeatherRisk(twoHour.condition, twentyFourHour.regionalForecast),
+    riskLevel: getWeatherRiskLevel(twoHour.condition, twentyFourHour.regionalForecast),
+    summary: buildWeatherSummary({
+      location,
+      twoHour,
+      twentyFourHour,
+      risk: hasWeatherRisk(twoHour.condition, twentyFourHour.regionalForecast),
+      riskLevel: getWeatherRiskLevel(twoHour.condition, twentyFourHour.regionalForecast)
+    })
+  };
+}
+
+function buildWeatherSummary({ location, twoHour, twentyFourHour, risk, riskLevel }) {
+  return [
+      risk ? `<b>WEATHER RISK ALERT</b>` : `<b>OCC WEATHER CHECK</b>`,
       `<code>${formatSingaporeDateTime(new Date())} SGT</code>`,
       "",
+      ...(risk ? [`<b>Status</b>\n${escapeHtml(riskLevel)}`, ""] : []),
       `<b>Location</b>`,
       `${escapeHtml(location.label)}`,
       "",
@@ -167,8 +181,7 @@ export async function getHourlyWeatherSummary(options = {}) {
       `<i>Awareness only. Not confirmed CAT1.</i>`
     ]
       .filter((line) => line !== false && line !== null && line !== undefined)
-      .join("\n")
-  };
+      .join("\n");
 }
 
 async function fetchJson(url) {
@@ -327,6 +340,31 @@ function compactForecast(value) {
     .replaceAll("Partly Cloudy", "Partly cloudy")
     .replaceAll("Thundery Showers", "Thundery showers")
     .replaceAll("Heavy Thundery Showers", "Heavy thundery showers");
+}
+
+function hasWeatherRisk(condition = "", regionalForecast = "") {
+  const text = `${condition}\n${regionalForecast}`.toLowerCase();
+  return (
+    text.includes("thundery") ||
+    text.includes("thunder") ||
+    text.includes("heavy rain") ||
+    text.includes("heavy showers") ||
+    text.includes("gusty winds")
+  );
+}
+
+function getWeatherRiskLevel(condition = "", regionalForecast = "") {
+  const text = `${condition}\n${regionalForecast}`.toLowerCase();
+  if (text.includes("heavy thundery") || text.includes("gusty winds")) {
+    return "RED - Heavy thundery showers / gusty winds forecast";
+  }
+  if (text.includes("thundery") || text.includes("thunder")) {
+    return "AMBER - Thundery showers forecast";
+  }
+  if (text.includes("heavy rain") || text.includes("heavy showers")) {
+    return "AMBER - Heavy rain/showers forecast";
+  }
+  return "GREEN - No thundery weather flagged";
 }
 
 function titleCase(value) {
