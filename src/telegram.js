@@ -188,6 +188,12 @@ export function summaryKeyboard() {
   };
 }
 
+export function backKeyboard(destination, label = "Back") {
+  return {
+    inline_keyboard: [[{ text: label, callback_data: `nav:${destination}` }]]
+  };
+}
+
 export function gameActionKeyboard(gameId) {
   return {
     inline_keyboard: [

@@ -14,6 +14,7 @@ import {
   adminKeyboard,
   adminResponseKeyboard,
   answerCallback,
+  backKeyboard,
   facilitatorKeyboard,
   forceReplyKeyboard,
   gameActionKeyboard,
@@ -57,6 +58,17 @@ export async function handleTelegramUpdate(update) {
   const text = message.text.trim();
   const chatId = message.chat.id;
   const user = message.from || {};
+
+  if (["/cancel", "/back", "/menu"].includes(text.toLowerCase())) {
+    await sendMessage(
+      chatId,
+      isAdmin(user.id)
+        ? "<b>OpsCatalyst Comms</b>\n\nAdmin control panel is ready."
+        : "<b>OpsCatalyst Comms</b>\n\nBack to quick reply.",
+      { reply_markup: isAdmin(user.id) ? adminKeyboard() : facilitatorKeyboard() }
+    );
+    return { ok: true, type: "menu" };
+  }
 
   if (message.reply_to_message?.text) {
     const handledReply = await handlePromptReply(message);
@@ -370,6 +382,17 @@ async function handlePromptReply(message) {
   const user = message.from || {};
   const chatId = message.chat.id;
 
+  if (["/cancel", "/back", "/menu"].includes(text.trim().toLowerCase())) {
+    await sendMessage(
+      chatId,
+      isAdmin(user.id)
+        ? "<b>OpsCatalyst Comms</b>\n\nAdmin control panel is ready."
+        : "<b>OpsCatalyst Comms</b>\n\nBack to quick reply.",
+      { reply_markup: isAdmin(user.id) ? adminKeyboard() : facilitatorKeyboard() }
+    );
+    return { ok: true, type: "prompt_cancelled" };
+  }
+
   const priorityMatch = prompt.match(/\[MSG_PRIORITY:(urgent|normal)\]/);
   if (priorityMatch) {
     await forwardPriorityMessage(message, priorityMatch[1]);
@@ -442,11 +465,15 @@ async function handleMessagePriorityCallback(callbackQuery) {
       "",
       "Reply to this message with what you need to tell the chief facilitator.",
       "It will be sent directly to the admin alert chat.",
+      "Type /cancel to go back.",
       "",
       `[MSG_PRIORITY:${urgent ? "urgent" : "normal"}]`
     ].join("\n"),
     { reply_markup: forceReplyKeyboard("Type your message") }
   );
+  await sendMessage(chatId, "Need to cancel?", {
+    reply_markup: backKeyboard(isAdmin(user.id) ? "admin" : "facilitator")
+  });
 }
 
 async function forwardPriorityMessage(message, priority) {
@@ -512,6 +539,7 @@ async function handlePointCallback(callbackQuery) {
         "",
         `Reply to this message with the ${escapeHtml(pbTypeLabel(pbType))} PB.`,
         pbType === "time" ? "Accepted time formats: MM:SS, HH:MM:SS, or seconds." : "",
+        "Type /cancel to go back.",
         "",
         `[PB_INPUT:${game.id}:${pbType}]`
       ]
@@ -519,6 +547,11 @@ async function handlePointCallback(callbackQuery) {
         .join("\n"),
       { reply_markup: forceReplyKeyboard(placeholder) }
     );
+    await sendMessage(chatId, "Need to cancel?", {
+      reply_markup: {
+        inline_keyboard: [[{ text: "Back", callback_data: `points:game:${game.id}` }]]
+      }
+    });
     return;
   }
 
@@ -575,6 +608,13 @@ async function handleNavigationCallback(callbackQuery) {
   if (destination === "admin") {
     await sendMessage(chatId, "<b>OpsCatalyst Comms</b>\n\nAdmin control panel is ready.", {
       reply_markup: adminKeyboard()
+    });
+    return;
+  }
+
+  if (destination === "facilitator") {
+    await sendMessage(chatId, "<b>OpsCatalyst Comms</b>\n\nBack to quick reply.", {
+      reply_markup: facilitatorKeyboard()
     });
     return;
   }
