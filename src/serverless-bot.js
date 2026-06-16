@@ -63,8 +63,8 @@ export async function handleTelegramUpdate(update) {
     await sendMessage(
       chatId,
       isAdmin(user.id)
-        ? "<b>OpsCatalyst Comms</b>\n\nAdmin control panel is ready."
-        : "<b>OpsCatalyst Comms</b>\n\nBack to quick reply.",
+        ? adminPanelText(user, chatId)
+        : facilitatorPanelText(),
       { reply_markup: isAdmin(user.id) ? adminKeyboard() : facilitatorKeyboard() }
     );
     return { ok: true, type: "menu" };
@@ -82,32 +82,7 @@ export async function handleTelegramUpdate(update) {
     const admin = isAdmin(user.id);
     await sendMessage(
       chatId,
-      admin
-        ? [
-            "<b>OpsCatalyst Comms</b>",
-            "",
-            "Admin control panel is ready.",
-            "Use Message for facilitator comms, Point System for game updates, and Check Weather for weather context.",
-            "",
-            `Your user id: <code>${user.id || "unknown"}</code>`,
-            `This chat id: <code>${chatId}</code>`,
-            forwardedChat
-              ? `Forwarded-from chat id: <code>${forwardedChat.id}</code> (${escapeHtml(forwardedChat.title || forwardedChat.username || "unnamed")})`
-              : "",
-            "",
-            "Quick reply:",
-            "<code>/reply USER_ID message</code>"
-          ]
-            .filter((line) => line !== "")
-            .join("\n")
-        : [
-            "<b>OpsCatalyst Comms</b>",
-            "",
-            "Use this bot to contact the chief facilitator quickly.",
-            "Tap Urgent/Normal, or type your message here.",
-            "",
-            "For urgent safety matters, choose Urgent Message or Safety/Medical."
-          ].join("\n"),
+      admin ? adminPanelText(user, chatId, forwardedChat) : facilitatorPanelText(),
       admin ? { reply_markup: adminKeyboard() } : { reply_markup: facilitatorKeyboard() }
     );
     return { ok: true, type: "help" };
@@ -115,7 +90,7 @@ export async function handleTelegramUpdate(update) {
 
   if (!isAdmin(user.id)) {
     if (text === "/report" || text === "/comms") {
-      await sendMessage(chatId, "Choose a report type, or type your message here.", { reply_markup: facilitatorKeyboard() });
+      await sendMessage(chatId, facilitatorPanelText(), { reply_markup: facilitatorKeyboard() });
       return { ok: true, type: "facilitator_menu" };
     }
 
@@ -386,8 +361,8 @@ async function handlePromptReply(message) {
     await sendMessage(
       chatId,
       isAdmin(user.id)
-        ? "<b>OpsCatalyst Comms</b>\n\nAdmin control panel is ready."
-        : "<b>OpsCatalyst Comms</b>\n\nBack to quick reply.",
+        ? adminPanelText(user, chatId)
+        : facilitatorPanelText(),
       { reply_markup: isAdmin(user.id) ? adminKeyboard() : facilitatorKeyboard() }
     );
     return { ok: true, type: "prompt_cancelled" };
@@ -462,9 +437,10 @@ async function handleMessagePriorityCallback(callbackQuery) {
     chatId,
     [
       urgent ? "<b>Urgent Message</b>" : "<b>Normal Message</b>",
+      urgent ? "<code>Priority Alert</code>" : "<code>Standard Update</code>",
       "",
-      "Reply to this message with what you need to tell the chief facilitator.",
-      "It will be sent directly to the admin alert chat.",
+      "Reply to this message with your update.",
+      "It will be sent directly to the chief facilitator.",
       "Type /cancel to go back.",
       "",
       `[MSG_PRIORITY:${urgent ? "urgent" : "normal"}]`
@@ -499,7 +475,9 @@ async function forwardPriorityMessage(message, priority) {
 
   await sendMessage(
     message.chat.id,
-    urgent ? "Urgent message sent as a priority alert." : "Normal message sent.",
+    urgent
+      ? "<b>Sent</b>\nYour urgent message was sent as a priority alert."
+      : "<b>Sent</b>\nYour normal message was sent to the chief facilitator.",
     { reply_markup: facilitatorKeyboard() }
   );
 }
@@ -516,14 +494,14 @@ async function handlePointCallback(callbackQuery) {
   await answerCallback(callbackQuery.id, "Selected.");
 
   if (action === "game" && game) {
-    await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n\nChoose an action.`, {
+    await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n<code>Station Update</code>\n\nChoose what you want to record.`, {
       reply_markup: gameActionKeyboard(game.id)
     });
     return;
   }
 
   if (action === "pb" && game) {
-    await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n\nSelect PB type.`, {
+    await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n<code>Personal Best</code>\n\nSelect the PB format.`, {
       reply_markup: pbTypeKeyboard(game.id)
     });
     return;
@@ -536,6 +514,7 @@ async function handlePointCallback(callbackQuery) {
       chatId,
       [
         `<b>${escapeHtml(game.name)}</b>`,
+        "<code>PB Entry</code>",
         "",
         `Reply to this message with the ${escapeHtml(pbTypeLabel(pbType))} PB.`,
         pbType === "time" ? "Accepted time formats: MM:SS, HH:MM:SS, or seconds." : "",
@@ -556,7 +535,7 @@ async function handlePointCallback(callbackQuery) {
   }
 
   if (action === "capture" && game) {
-    await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n\nWho captured it?`, {
+    await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n<code>Capture Record</code>\n\nSelect the team that captured this station.`, {
       reply_markup: teamCaptureKeyboard(game.id, TEAM_OPTIONS)
     });
     return;
@@ -587,7 +566,7 @@ async function handlePointCallback(callbackQuery) {
       ].join("\n"),
       user.id
     );
-    await sendMessage(chatId, `${team} captured ${game.name} at ${capturedAt}.`, {
+    await sendMessage(chatId, `<b>Capture Recorded</b>\n\n${escapeHtml(team)} captured ${escapeHtml(game.name)}.\nTime: ${capturedAt}`, {
       reply_markup: gameActionKeyboard(game.id)
     });
     return;
@@ -606,14 +585,14 @@ async function handleNavigationCallback(callbackQuery) {
   await answerCallback(callbackQuery.id, "Back.");
 
   if (destination === "admin") {
-    await sendMessage(chatId, "<b>OpsCatalyst Comms</b>\n\nAdmin control panel is ready.", {
+    await sendMessage(chatId, adminPanelText(user, chatId), {
       reply_markup: adminKeyboard()
     });
     return;
   }
 
   if (destination === "facilitator") {
-    await sendMessage(chatId, "<b>OpsCatalyst Comms</b>\n\nBack to quick reply.", {
+    await sendMessage(chatId, facilitatorPanelText(), {
       reply_markup: facilitatorKeyboard()
     });
     return;
@@ -629,7 +608,7 @@ async function handleFacilitatorCallback(callbackQuery) {
   const actorName = formatUser(user) || "Unknown user";
 
   await answerCallback(callbackQuery.id, `Sent: ${label}`);
-  await sendMessage(callbackQuery.message?.chat?.id || user.id, `Sent to chief facilitator: ${label}`, {
+  await sendMessage(callbackQuery.message?.chat?.id || user.id, `<b>Report Sent</b>\n\n${escapeHtml(label)} was sent to the chief facilitator.`, {
     reply_markup: facilitatorKeyboard()
   });
 
@@ -670,7 +649,7 @@ async function forwardFacilitatorMessage(message) {
     user.id
   );
 
-  await sendMessage(message.chat.id, "Message sent to the chief facilitator.", { reply_markup: facilitatorKeyboard() });
+  await sendMessage(message.chat.id, "<b>Message Sent</b>\n\nYour update was sent to the chief facilitator.", { reply_markup: facilitatorKeyboard() });
 }
 
 async function handleAdminReplyCallback(callbackQuery) {
@@ -707,14 +686,14 @@ async function handleAdminCallback(callbackQuery) {
   await answerCallback(callbackQuery.id, "Working...");
 
   if (action === "message_menu") {
-    await sendMessage(chatId, "<b>Message</b>\n\nChoose message priority.", {
+    await sendMessage(chatId, "<b>Facilitator Message</b>\n<code>Choose Priority</code>\n\nUrgent sends a priority alert to the chief facilitator. Normal sends a standard message.", {
       reply_markup: messagePriorityKeyboard()
     });
     return;
   }
 
   if (action === "point_system") {
-    await sendMessage(chatId, "<b>Point System</b>\n\nSelect a game or inject.", {
+    await sendMessage(chatId, "<b>Point System</b>\n<code>Select Station</code>\n\nChoose the game or inject you want to update.", {
       reply_markup: gameOptionsKeyboard(GAME_OPTIONS)
     });
     return;
@@ -730,7 +709,7 @@ async function handleAdminCallback(callbackQuery) {
   if (action === "cat1_on") {
     const window = buildCat1Window();
     await broadcastCat1("Manual CAT1 activation by Chief/Admin.", true, window);
-    await sendMessage(chatId, "CAT1 activated and broadcasted.", { reply_markup: adminKeyboard() });
+    await sendMessage(chatId, "<b>CAT1 Broadcast Sent</b>\n\nThe channel has been updated.", { reply_markup: adminKeyboard() });
     return;
   }
 
@@ -745,7 +724,7 @@ async function handleAdminCallback(callbackQuery) {
       ].join("\n"),
       { reply_markup: safetyKeyboard() }
     );
-    await sendMessage(chatId, "CAT1 cleared and broadcasted.", { reply_markup: adminKeyboard() });
+    await sendMessage(chatId, "<b>All Clear Sent</b>\n\nThe channel has been updated.", { reply_markup: adminKeyboard() });
     return;
   }
 
@@ -753,7 +732,7 @@ async function handleAdminCallback(callbackQuery) {
     await sendMessage(config.channelId, "<b>EVENT PAUSED</b>\n\nStop new claims and await Chief Facilitator instruction.", {
       reply_markup: opsKeyboard()
     });
-    await sendMessage(chatId, "Event pause broadcasted.", { reply_markup: adminKeyboard() });
+    await sendMessage(chatId, "<b>Event Pause Sent</b>\n\nThe channel has been updated.", { reply_markup: adminKeyboard() });
     return;
   }
 
@@ -761,7 +740,7 @@ async function handleAdminCallback(callbackQuery) {
     await sendMessage(config.channelId, "<b>EVENT RESUMED</b>\n\nContinue only under facilitator instructions.", {
       reply_markup: opsKeyboard()
     });
-    await sendMessage(chatId, "Event resume broadcasted.", { reply_markup: adminKeyboard() });
+    await sendMessage(chatId, "<b>Event Resume Sent</b>\n\nThe channel has been updated.", { reply_markup: adminKeyboard() });
     return;
   }
 
@@ -778,7 +757,7 @@ async function handleAdminCallback(callbackQuery) {
 
   if (action === "broadcast_weather") {
     await runHourlyWeatherBroadcast();
-    await sendMessage(chatId, "Weather update broadcasted.", { reply_markup: adminKeyboard() });
+    await sendMessage(chatId, "<b>Weather Broadcast Sent</b>\n\nThe channel has been updated with the latest OCC weather card.", { reply_markup: adminKeyboard() });
     return;
   }
 
@@ -904,6 +883,7 @@ function pbTypeLabel(type) {
 function buildCaptureSummaryMessage() {
   const lines = [
     "<b>Capture Summary</b>",
+    "<code>Latest Station Captures</code>",
     "",
     ...GAME_OPTIONS.map((game) => {
       const capture = captureSummary.get(game.id);
@@ -920,6 +900,48 @@ function buildCaptureSummaryMessage() {
   ];
 
   return lines.join("\n\n");
+}
+
+function adminPanelText(user = {}, chatId = "", forwardedChat = null) {
+  return [
+    "<b>OpsCatalyst Comms</b>",
+    "<code>Admin Control Panel</code>",
+    "",
+    "<b>Comms</b>",
+    "Send priority or normal facilitator messages.",
+    "",
+    "<b>Point System</b>",
+    "Record PBs, captures, and view latest station status.",
+    "",
+    "<b>Weather</b>",
+    "Check or broadcast the OCC watch-area forecast.",
+    "",
+    `<b>Your ID:</b> <code>${user.id || "unknown"}</code>`,
+    chatId ? `<b>Chat ID:</b> <code>${chatId}</code>` : "",
+    forwardedChat
+      ? `<b>Forwarded Chat:</b> <code>${forwardedChat.id}</code> (${escapeHtml(forwardedChat.title || forwardedChat.username || "unnamed")})`
+      : "",
+    "",
+    "<b>Quick reply</b>",
+    "<code>/reply USER_ID message</code>"
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+function facilitatorPanelText() {
+  return [
+    "<b>OpsCatalyst Comms</b>",
+    "<code>Facilitator Quick Reply</code>",
+    "",
+    "<b>Message Chief</b>",
+    "Use Urgent for time-sensitive issues. Use Normal for routine updates.",
+    "",
+    "<b>Quick Reports</b>",
+    "Tap the closest issue type and it will be sent directly to the chief facilitator.",
+    "",
+    "<i>For safety or medical matters, use Safety/Medical or Urgent.</i>"
+  ].join("\n");
 }
 
 function cannedReply(action) {

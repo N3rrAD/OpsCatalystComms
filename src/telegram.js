@@ -110,8 +110,8 @@ export function facilitatorKeyboard() {
   return {
     inline_keyboard: [
       [
-        { text: "Urgent Message", callback_data: "facmsg:urgent" },
-        { text: "Normal Message", callback_data: "facmsg:normal" }
+        { text: "Urgent to Chief", callback_data: "facmsg:urgent" },
+        { text: "Normal to Chief", callback_data: "facmsg:normal" }
       ],
       [
         { text: "Need Support", callback_data: "fac:need_support" },
@@ -148,11 +148,11 @@ export function adminKeyboard() {
   return {
     inline_keyboard: [
       [
-        { text: "Message", callback_data: "admin:message_menu" },
+        { text: "Facilitator Message", callback_data: "admin:message_menu" },
         { text: "Point System", callback_data: "admin:point_system" }
       ],
       [
-        { text: "Summary", callback_data: "admin:summary" },
+        { text: "Capture Summary", callback_data: "admin:summary" },
         { text: "Check Weather", callback_data: "admin:check_weather" }
       ],
       [
@@ -166,8 +166,8 @@ export function messagePriorityKeyboard() {
   return {
     inline_keyboard: [
       [
-        { text: "Urgent", callback_data: "facmsg:urgent" },
-        { text: "Normal", callback_data: "facmsg:normal" }
+        { text: "Urgent Alert", callback_data: "facmsg:urgent" },
+        { text: "Normal Note", callback_data: "facmsg:normal" }
       ],
       [
         { text: "Back", callback_data: "nav:admin" }
@@ -198,8 +198,8 @@ export function gameActionKeyboard(gameId) {
   return {
     inline_keyboard: [
       [
-        { text: "PB", callback_data: `points:pb:${gameId}` },
-        { text: "Who captured it", callback_data: `points:capture:${gameId}` }
+        { text: "Update PB", callback_data: `points:pb:${gameId}` },
+        { text: "Record Capture", callback_data: `points:capture:${gameId}` }
       ],
       [{ text: "Back to Games", callback_data: "admin:point_system" }]
     ]
