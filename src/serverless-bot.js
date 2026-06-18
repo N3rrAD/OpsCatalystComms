@@ -19,6 +19,7 @@ import {
   forceReplyKeyboard,
   gameActionKeyboard,
   gameOptionsKeyboard,
+  injectPointKeyboard,
   locationRequestKeyboard,
   messagePriorityKeyboard,
   opsKeyboard,
@@ -30,6 +31,16 @@ import {
 } from "./telegram.js";
 
 const captureSummary = new Map();
+const scoringState = {
+  active: false,
+  startedAt: "",
+  nextAwardAtMs: 0,
+  intervalNumber: 0,
+  points: createEmptyTeamPoints(),
+  chatId: "",
+  timer: null
+};
+const SCORING_INTERVAL_MS = 10 * 60 * 1000;
 
 export async function handleTelegramUpdate(update) {
   if (update.callback_query) {
@@ -185,6 +196,21 @@ async function handleAdminCommand(text, chatId) {
 
   if (command === "/status") {
     await sendMessage(chatId, formatServerlessStatus());
+    return;
+  }
+
+  if (command === "/game_start") {
+    await startGameScoring(chatId);
+    return;
+  }
+
+  if (command === "/score_tick") {
+    await runGameScoringTick("manual", { force: true, chatId });
+    return;
+  }
+
+  if (command === "/score_summary") {
+    await sendMessage(chatId, buildScoreSummaryMessage("Current Scoreboard"), { reply_markup: adminKeyboard() });
     return;
   }
 
@@ -541,6 +567,52 @@ async function handlePointCallback(callbackQuery) {
     return;
   }
 
+  if (action === "inject_point" && game) {
+    await sendMessage(chatId, `<b>${escapeHtml(game.name)}</b>\n<code>Manual Inject Point</code>\n\nSelect the team to award 1 point.`, {
+      reply_markup: injectPointKeyboard(game.id, TEAM_OPTIONS)
+    });
+    return;
+  }
+
+  if (action === "inject_team" && game) {
+    const team = getTeam(parts[3]);
+    if (!team) {
+      await sendMessage(chatId, "Unknown team selected. Please try again.", { reply_markup: gameActionKeyboard(game.id) });
+      return;
+    }
+
+    scoringState.points[team] = (scoringState.points[team] || 0) + 1;
+    const awardedAt = formatSingaporeTimestamp();
+
+    await notifyAdmins(
+      [
+        "<b>Manual Inject Point</b>",
+        "",
+        `<b>Inject:</b> ${escapeHtml(game.name)}`,
+        `<b>Team:</b> ${escapeHtml(team)}`,
+        "<b>Points:</b> +1",
+        `<b>Awarded at:</b> ${awardedAt}`,
+        `<b>Submitted by:</b> ${escapeHtml(formatUser(user) || "Unknown user")}`
+      ].join("\n"),
+      user.id
+    );
+
+    await sendMessage(
+      chatId,
+      [
+        "<b>Inject Point Awarded</b>",
+        "",
+        `${escapeHtml(team)} received +1 point.`,
+        `<b>Inject:</b> ${escapeHtml(game.name)}`,
+        `<b>Time:</b> ${awardedAt}`,
+        "",
+        buildScoreSummaryMessage("Updated Team Points")
+      ].join("\n"),
+      { reply_markup: gameActionKeyboard(game.id) }
+    );
+    return;
+  }
+
   if (action === "team" && game) {
     const team = getTeam(parts[3]);
     if (!team) {
@@ -702,6 +774,18 @@ async function handleAdminCallback(callbackQuery) {
   if (action === "summary") {
     await sendMessage(chatId, buildCaptureSummaryMessage(), {
       reply_markup: summaryKeyboard()
+    });
+    return;
+  }
+
+  if (action === "game_start") {
+    await startGameScoring(chatId);
+    return;
+  }
+
+  if (action === "score_summary") {
+    await sendMessage(chatId, buildScoreSummaryMessage("Current Scoreboard"), {
+      reply_markup: adminKeyboard()
     });
     return;
   }
@@ -900,6 +984,150 @@ function buildCaptureSummaryMessage() {
   ];
 
   return lines.join("\n\n");
+}
+
+async function startGameScoring(chatId) {
+  if (scoringState.timer) {
+    clearTimeout(scoringState.timer);
+  }
+
+  scoringState.active = true;
+  scoringState.startedAt = formatSingaporeTimestamp();
+  scoringState.nextAwardAtMs = Date.now() + SCORING_INTERVAL_MS;
+  scoringState.intervalNumber = 0;
+  scoringState.points = createEmptyTeamPoints();
+  scoringState.chatId = chatId;
+
+  scheduleNextScoringTick();
+
+  await sendMessage(
+    chatId,
+    [
+      "<b>Game Started</b>",
+      "<code>10-Minute Scoring Active</code>",
+      "",
+      "Every 10 minutes, each captured main game awards 1 point to the team currently holding it.",
+      "Inject points are awarded manually from the Point System menu.",
+      "",
+      `<b>Started:</b> ${escapeHtml(scoringState.startedAt)}`,
+      `<b>First scoring:</b> ${escapeHtml(formatSingaporeTimestamp(new Date(scoringState.nextAwardAtMs)))}`,
+      "",
+      "<i>Keep recording captures through Point System.</i>"
+    ].join("\n"),
+    { reply_markup: adminKeyboard() }
+  );
+}
+
+export async function runGameScoringTick(source = "cron", options = {}) {
+  if (!scoringState.active) {
+    return { ok: true, active: false, skipped: true, reason: "Game scoring has not started." };
+  }
+
+  const now = Date.now();
+  if (!options.force && now < scoringState.nextAwardAtMs - 15_000) {
+    return {
+      ok: true,
+      active: true,
+      skipped: true,
+      reason: "Scoring interval is not due yet.",
+      nextAwardAt: new Date(scoringState.nextAwardAtMs).toISOString()
+    };
+  }
+
+  const awards = awardCurrentCaptures();
+  scoringState.intervalNumber += 1;
+  scoringState.nextAwardAtMs = now + SCORING_INTERVAL_MS;
+
+  const message = buildScoreTickMessage({
+    source,
+    awards,
+    awardedAt: formatSingaporeTimestamp(),
+    nextAwardAt: formatSingaporeTimestamp(new Date(scoringState.nextAwardAtMs))
+  });
+  const targetChatId = options.chatId || scoringState.chatId || config.adminAlertChatId || config.channelId;
+
+  await sendMessage(targetChatId, message, { reply_markup: adminKeyboard() });
+  scheduleNextScoringTick();
+
+  return {
+    ok: true,
+    active: true,
+    intervalNumber: scoringState.intervalNumber,
+    awards,
+    points: scoringState.points,
+    nextAwardAt: new Date(scoringState.nextAwardAtMs).toISOString()
+  };
+}
+
+function scheduleNextScoringTick() {
+  if (!scoringState.active) return;
+  if (scoringState.timer) clearTimeout(scoringState.timer);
+
+  const delayMs = Math.max(1000, scoringState.nextAwardAtMs - Date.now());
+  scoringState.timer = setTimeout(() => {
+    runGameScoringTick("timer").catch((error) => {
+      console.error("Game scoring tick failed", error);
+    });
+  }, delayMs);
+  scoringState.timer.unref?.();
+}
+
+function awardCurrentCaptures() {
+  const awards = [];
+  for (const game of GAME_OPTIONS) {
+    if (game.id.startsWith("inject_")) continue;
+
+    const capture = captureSummary.get(game.id);
+    if (!capture?.team) continue;
+
+    scoringState.points[capture.team] = (scoringState.points[capture.team] || 0) + 1;
+    awards.push({
+      game: game.name,
+      team: capture.team,
+      capturedAt: capture.capturedAt
+    });
+  }
+  return awards;
+}
+
+function buildScoreTickMessage({ source, awards, awardedAt, nextAwardAt }) {
+  const awardLines = awards.length
+    ? awards.map((award) => `${escapeHtml(award.team)} +1 - ${escapeHtml(award.game)}`).join("\n")
+    : "No captured stations yet. No points awarded this interval.";
+
+  return [
+    "<b>10-Minute Score Update</b>",
+    `<code>Interval ${scoringState.intervalNumber}</code>`,
+    "",
+    `<b>Awarded at:</b> ${escapeHtml(awardedAt)}`,
+    `<b>Source:</b> ${escapeHtml(source)}`,
+    "",
+    "<b>This Interval</b>",
+    awardLines,
+    "",
+    "<i>Auto scoring excludes Inject 1 and Inject 2. Award inject points manually.</i>",
+    "",
+    buildScoreSummaryMessage("Team Points"),
+    "",
+    `<b>Next scoring:</b> ${escapeHtml(nextAwardAt)}`
+  ].join("\n");
+}
+
+function buildScoreSummaryMessage(title = "Team Points") {
+  return [
+    `<b>${escapeHtml(title)}</b>`,
+    scoringState.active ? "<code>Game Active</code>" : "<code>Game Not Started</code>",
+    "",
+    ...TEAM_OPTIONS.map((team) => `${escapeHtml(team)}: ${scoringState.points[team] || 0} point${(scoringState.points[team] || 0) === 1 ? "" : "s"}`),
+    "",
+    scoringState.active
+      ? `<b>Next scoring:</b> ${escapeHtml(formatSingaporeTimestamp(new Date(scoringState.nextAwardAtMs)))}`
+      : "Tap Game Start to begin 10-minute scoring."
+  ].join("\n");
+}
+
+function createEmptyTeamPoints() {
+  return Object.fromEntries(TEAM_OPTIONS.map((team) => [team, 0]));
 }
 
 function adminPanelText(user = {}, chatId = "", forwardedChat = null) {

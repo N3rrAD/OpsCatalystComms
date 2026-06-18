@@ -42,6 +42,7 @@ Vercel cannot keep `npm start` running 24/7 as a long-polling process. This repo
 - `/api/telegram` receives Telegram webhook updates
 - `/api/cron` performs the weather check when called by Vercel Cron, cron-job.org, UptimeRobot, or another scheduler
 - `/api/hourly-weather` broadcasts an hourly weather check when called by a scheduler
+- `/api/scoring` awards 10-minute game points when called by a scheduler
 - `/api/health` confirms the deployment is alive
 
 Set these Vercel environment variables:
@@ -125,6 +126,28 @@ https://YOUR-VERCEL-DOMAIN.vercel.app/api/hourly-weather?secret=YOUR_CRON_SECRET
 https://YOUR-VERCEL-DOMAIN.vercel.app/api/hourly-weather?secret=YOUR_CRON_SECRET&lat=1.3521&lon=103.8198&label=Event%20Site
 ```
 
+### Game Scoring Scheduler
+
+The admin panel has a `Game Start` button. It resets team points, starts 10-minute scoring, and tells admins when the first scoring tick is due.
+
+Every 10 minutes, the scoring tick awards 1 point per main game to whichever team is currently recorded as the latest captor for that station. For example, if Team 3 is the latest captor for 4 main games at the tick, Team 3 receives 4 points for that interval.
+
+Inject 1 and Inject 2 do not auto-score. Open the inject in Point System and tap `Award Inject Point` to manually add 1 point to the selected team.
+
+For reliable 10-minute scoring on Vercel, create an external scheduler that calls:
+
+```text
+https://YOUR-VERCEL-DOMAIN.vercel.app/api/scoring?secret=YOUR_CRON_SECRET
+```
+
+Set the external scheduler to once every 10 minutes. You can manually force one scoring tick from the admin chat with:
+
+```text
+/score_tick
+```
+
+Current capture and score storage is in-memory on the running function instance. For a fully foolproof event scoreboard that survives cold starts or redeploys, add persistent storage such as Redis, Supabase, or a database.
+
 ## Useful Commands
 
 Admin-only:
@@ -143,6 +166,9 @@ Admin-only:
 /weather_at 1.3521 103.8198 Event Site
 /broadcast_weather_at Bishan
 /track_location
+/game_start
+/score_summary
+/score_tick
 /broadcast Your message here
 /export_log
 ```
@@ -154,6 +180,8 @@ The primary admin panel now shows:
 ```text
 Message
 Point System
+Game Start
+Score Summary
 Summary
 Check Weather
 Broadcast Weather
@@ -186,7 +214,7 @@ Inject 1: Underway
 Inject 2: Knot Showdown
 ```
 
-Each game lets the user choose PB or who captured it. PB accepts Points, Time, or Other. Time PBs are normalized to `MM:SS` or `HH:MM:SS` where possible. Capture updates show the team and Singapore timestamp.
+Each game lets the user choose PB or who captured it. PB accepts Points, Time, or Other. Time PBs are normalized to `MM:SS` or `HH:MM:SS` where possible. Capture updates show the team and Singapore timestamp. Inject stations also show `Award Inject Point`, which manually adds 1 point to the chosen team.
 
 The main Summary button shows every game and the latest team capture/time. If a game has not been captured, it shows "No one has captured yet." Current summary storage is in-memory on the running Vercel function instance; add persistent storage if this must survive cold starts or redeploys.
 

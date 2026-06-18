@@ -152,6 +152,10 @@ export function adminKeyboard() {
         { text: "Point System", callback_data: "admin:point_system" }
       ],
       [
+        { text: "Game Start", callback_data: "admin:game_start" },
+        { text: "Score Summary", callback_data: "admin:score_summary" }
+      ],
+      [
         { text: "Capture Summary", callback_data: "admin:summary" },
         { text: "Check Weather", callback_data: "admin:check_weather" }
       ],
@@ -195,14 +199,21 @@ export function backKeyboard(destination, label = "Back") {
 }
 
 export function gameActionKeyboard(gameId) {
-  return {
-    inline_keyboard: [
-      [
-        { text: "Update PB", callback_data: `points:pb:${gameId}` },
-        { text: "Record Capture", callback_data: `points:capture:${gameId}` }
-      ],
-      [{ text: "Back to Games", callback_data: "admin:point_system" }]
+  const rows = [
+    [
+      { text: "Update PB", callback_data: `points:pb:${gameId}` },
+      { text: "Record Capture", callback_data: `points:capture:${gameId}` }
     ]
+  ];
+
+  if (String(gameId).startsWith("inject_")) {
+    rows.push([{ text: "Award Inject Point", callback_data: `points:inject_point:${gameId}` }]);
+  }
+
+  rows.push([{ text: "Back to Games", callback_data: "admin:point_system" }]);
+
+  return {
+    inline_keyboard: rows
   };
 }
 
@@ -224,6 +235,14 @@ export function pbTypeKeyboard(gameId) {
 export function teamCaptureKeyboard(gameId, teams) {
   const rows = teams.map((team, index) => [
     { text: team, callback_data: `points:team:${gameId}:${index + 1}` }
+  ]);
+  rows.push([{ text: "Back", callback_data: `points:game:${gameId}` }]);
+  return { inline_keyboard: rows };
+}
+
+export function injectPointKeyboard(gameId, teams) {
+  const rows = teams.map((team, index) => [
+    { text: team, callback_data: `points:inject_team:${gameId}:${index + 1}` }
   ]);
   rows.push([{ text: "Back", callback_data: `points:game:${gameId}` }]);
   return { inline_keyboard: rows };
